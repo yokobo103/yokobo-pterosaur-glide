@@ -23,7 +23,7 @@ const ui = {
   start: el('start'), go: el('go'),
 };
 
-const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'flat';
+const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'hills';   // 既定は丘のある世界。?world=flat で起伏なし
 Object.assign(TUNE, WORLDS[WORLD]);
 if (WORLD === 'ridge') {
   const p = document.querySelector('#start p');
@@ -174,6 +174,7 @@ window.__slice = {
   ridgeAt(x, y, z) { return field.ridgeAt(x, y, z, sunlight(glider.time)); },
   terrainHeight(x, y) { return terrain.height(x, y); },
   riverX(y) { return terrain.riverX(y); },
+  reach() { return view.reach; },
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),

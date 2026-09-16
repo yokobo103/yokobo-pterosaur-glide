@@ -57,6 +57,13 @@ export class Terrain {
         }
       }
       mtn += 0.12 * TUNE.mtnHeight * ridged(x / 1400, y / 1400, this.seed + 71) * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
+    } else if (TUNE.mtn && TUNE.mtnMode === 'hills') {
+      // 丘と峠。平らな所を残しつつ、ところどころ越えるか避けるかを迫る高さにする。
+      // 川沿いも完全には平らにしない(川に沿っていれば安全、にならないように)
+      const b = fbm(x / TUNE.mtnWave, y / TUNE.mtnWave, this.seed + 71, 4);
+      const r = ridged(x / (TUNE.mtnWave * 0.8), y / (TUNE.mtnWave * 0.8), this.seed + 83, 3);
+      const shape = Math.max(0, 0.6 * b + 0.4 * r - 0.35) / 0.65;
+      mtn = TUNE.mtnHeight * shape * shape * (0.4 + 0.6 * smoothstep(150, 1300, d));
     } else if (TUNE.mtn) {
       mtn = TUNE.mtnHeight * ridged(x / TUNE.mtnWave, y / (TUNE.mtnWave * 2.6), this.seed + 71)
         * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
@@ -107,6 +114,8 @@ export const TUNE = {
 // 尾根の試作で、尾根沿いに飛べると測れた山脈の設定(tools/ridge-band.mjs: 86%の区間で高度を保てる・最長2.5km・斜面から150m)
 export const WORLDS = {
   flat: {},
+  // 既定。尾根の風は使わず、起伏そのものを「避けるか越えるか」の判断にする(所長の試走 2026-09-17)
+  hills: { mtn: 1, mtnMode: 'hills', mtnHeight: 220, mtnWave: 2400 },
   ridge: { mtn: 1, mtnMode: 'ranges', mtnHeight: 550, rangeWidth: 700, windSpeed: 11, ridgeH: 240, leeCap: 2.5 },
 };
 
