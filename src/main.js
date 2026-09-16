@@ -6,7 +6,14 @@ import { Vario } from './audio.js';
 const q = new URLSearchParams(location.search);
 const SEED = Number(q.get('seed') ?? Math.floor(Math.random() * 9999));
 const HARNESS = q.has('harness');          // 検査用: rAFを止めて手でコマを進める
-const CAM_KEY = CAMS[q.get('cam')] ? q.get('cam') : 'a';
+const CAM_STORE = 'glide.cam';
+let saved = null;
+try { saved = localStorage.getItem(CAM_STORE); } catch (e) { /* 保存できない環境でも遊べる */ }
+let CAM_KEY = CAMS[q.get('cam')] ? q.get('cam') : (CAMS[saved] && saved !== 'old' ? saved : 'a');
+const camOf = key => {
+  const r = Number(q.get('roll'));                     // 調整用: ?roll=0.2 で傾きの強さだけ上書き
+  return Number.isFinite(r) && q.has('roll') ? { ...CAMS[key], roll: r } : CAMS[key];
+};
 if (CAM_KEY === 'old') { AIR.bankRate = 1.6; AIR.inputTau = 0; }   // 直す前の再現(比較測定用)
 
 const el = id => document.getElementById(id);
@@ -18,8 +25,18 @@ const ui = {
 
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
-const view = new View(el('app'), terrain, field, CAMS[CAM_KEY]);
-{ const h = document.querySelector('#start h1'); if (h) h.textContent += '（カメラ: ' + CAMS[CAM_KEY].name + '）'; }
+const view = new View(el('app'), terrain, field, camOf(CAM_KEY));
+
+// スタート画面のカメラ選択。選んだものは次回も使う
+const camButtons = [...document.querySelectorAll('#cams button')];
+function pickCam(key) {
+  CAM_KEY = key;
+  view.setCam(camOf(key));
+  for (const b of camButtons) b.setAttribute('aria-checked', String(b.dataset.cam === key));
+  try { localStorage.setItem(CAM_STORE, key); } catch (e) { /* 覚えられなくても選択自体は効く */ }
+}
+for (const b of camButtons) b.addEventListener('click', () => pickCam(b.dataset.cam));
+for (const b of camButtons) b.setAttribute('aria-checked', String(b.dataset.cam === CAM_KEY));
 const vario = new Vario();
 let glider = new Glider(terrain, field);
 let running = false, ended = false;
@@ -111,6 +128,8 @@ ui.go.addEventListener('click', () => {
 // ---- 検査用の口。画面が出ない環境でもここから回す ----
 window.__slice = {
   seed: SEED,
+  camKey: () => CAM_KEY,
+  camRoll: () => view.cam.roll,
   begin() { ui.start.classList.add('hidden'); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },
   // 実時間を待たずにn秒ぶん進める

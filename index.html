@@ -32,6 +32,13 @@
   #start kbd { background:rgba(255,255,255,.14); border-radius:4px; padding:1px 7px; font-size:12px; }
   #start button { margin:6px auto 0; padding:13px 40px; font-size:15px; border:0; border-radius:999px;
                   background:#e8eef7; color:#10151d; font-weight:650; }
+  #cams { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  #start #cams button { margin:0; padding:10px 16px; font-size:13px; font-weight:600;
+                        background:rgba(255,255,255,.1); color:#e8eef7; border:1px solid rgba(255,255,255,.22); }
+  /* 選択中は「はじめる」と見分けがつくよう、塗らずに枠と印で示す */
+  #start #cams button[aria-checked="true"] { background:rgba(127,224,138,.16); color:#fff; border-color:#7fe08a; }
+  #start #cams button[aria-checked="true"]::before { content:"✓ "; color:#7fe08a; }
+  #start p.note { font-size:11px; opacity:.6; margin-top:-6px; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -55,6 +62,12 @@
       右の帯と音が上がっていれば、上昇気流の芯に近い。<br>
       日が傾くと空気は上がらなくなります。降りたところが記録。
     </p>
+    <div id="cams" role="radiogroup" aria-label="カメラ">
+      <button type="button" data-cam="a" role="radio">水平キープ</button>
+      <button type="button" data-cam="c" role="radio">見下ろし</button>
+      <button type="button" data-cam="b" role="radio">少し傾く</button>
+    </div>
+    <p class="note">画面酔いしやすい人は「水平キープ」か「見下ろし」</p>
     <button id="go">はじめる</button>
   </div>
   <script type="module" src="/src/main.js"></script>
