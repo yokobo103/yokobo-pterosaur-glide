@@ -170,20 +170,35 @@ class Clouds {
 }
 
 function makeGlider() {
+  // 灰色の箱。どの角度から見ても向きが分かる形にする。
+  // 厚みゼロの板だと、カメラの仰角が浅いとき消えて「鼻がこちらを向いた」ように見える。
   const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
-  // 灰色の箱。翼開長だけ合わせた三角で、本番の翼竜モデルではない。
-  const wing = new THREE.BufferGeometry();
-  wing.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    0, 0, 7, -11, 0.6, -3, 11, 0.6, -3,
-    0, 0, 7, 11, 0.6, -3, -11, 0.6, -3,
-  ]), 3));
-  wing.computeVertexNormals();
-  g.add(new THREE.Mesh(wing, mat));
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.1, 7, 4, 8),
-    new THREE.MeshLambertMaterial({ color: 0xbdb49f }));
-  body.rotation.x = Math.PI / 2; body.position.z = 1.5;
+  const skin = new THREE.MeshLambertMaterial({ color: 0xd8d2c4 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x8d857a });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.6, 12), skin);
+  body.position.z = 1;
   g.add(body);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.0, 4.5, 6), dark);  // 前がどっちか分かる目印
+  nose.rotation.x = Math.PI / 2; nose.position.z = 9;
+  g.add(nose);
+
+  // 上反角つきの翼。左右が別の面を向くので、真横から見ても片方は必ず見える
+  for (const sgn of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(11, 0.55, 4.6), skin);
+    w.position.set(sgn * 5.8, 1.1, 0.5);
+    w.rotation.z = -sgn * 0.21;          // 上反角 12度
+    w.rotation.y = sgn * 0.30;           // 後退角
+    g.add(w);
+  }
+  // 尾。回転している向きが読める
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.4, 3.0), dark);
+  fin.position.set(0, 2.2, -5.5);
+  g.add(fin);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(6.0, 0.45, 2.2), skin);
+  tail.position.set(0, 1.0, -5.8);
+  g.add(tail);
   return g;
 }
 
@@ -242,7 +257,7 @@ export class View {
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     this.glider.position.set(g.x, g.z, g.y);
-    this.glider.rotation.set(0, -g.head, -g.bank * 1.25, 'YXZ');
+    this.glider.rotation.set(0, -g.head, -g.bank * 1.0, 'YXZ');
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
     const day = new THREE.Color(0xbfd0e0), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
     const sky = sun > 0.35
@@ -259,7 +274,7 @@ export class View {
     this.sunDisc.material.color.setHSL(0.11, 0.55 * (1 - sun) + 0.08, 0.92 - 0.12 * (1 - sun));
     this.sunLight.position.set(0, Math.sin(elev), Math.cos(elev));
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
-    const back = 78, up = 38 + 14 * tall;
+    const back = 105, up = 28;
     // カメラは機体の向きに遅れてついていく。遅れる分だけ、機体が画面の中で振れて見える
     if (this.camHead === null) this.camHead = g.head;
     let e = g.head - this.camHead;
@@ -268,8 +283,8 @@ export class View {
     this.camHead += e * (1 - Math.exp(-dt / 0.75));
     const ch = this.camHead;
     this.camera.position.set(g.x - Math.sin(ch) * back, g.z + up, g.y - Math.cos(ch) * back);
-    this.camera.lookAt(g.x + Math.sin(ch) * 340, g.z - 34 + 46 * tall, g.y + Math.cos(ch) * 340);
-    this.camera.rotation.z += g.bank * 0.16;
+    this.camera.lookAt(g.x + Math.sin(ch) * 320, g.z + 7 + 16 * tall, g.y + Math.cos(ch) * 320);
+    this.camera.rotation.z += g.bank * 0.75;
     this.renderer.render(this.scene, this.camera);
   }
 }
