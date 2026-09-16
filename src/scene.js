@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+// three.jsは右手系で、+X は画面の左に出る。
+// シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
+const SX = -1;
+
 // 地形は運ばず、その場で作る。プレイヤーに合わせて格子をスナップして高さを引き直す。
 class Ground {
   constructor(terrain, size, seg, opts = {}) {
@@ -12,7 +16,7 @@ class Ground {
     const idx = [];
     for (let j = 0; j < seg; j++) for (let i = 0; i < seg; i++) {
       const a = j * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
-      idx.push(a, c, b, b, c, d);
+      idx.push(a, b, c, b, d, c);   // SXでX反転しているぶん巻き順も反転
     }
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
@@ -35,7 +39,7 @@ class Ground {
       let z = t.height(x, y);
       // 内側は高精細メッシュが描くので、ここは沈めて隠す
       if (hole && Math.abs(x - cx) < hole && Math.abs(y - cy) < hole) z = -9999;
-      this.pos[k] = x; this.pos[k + 1] = z; this.pos[k + 2] = y;
+      this.pos[k] = SX * x; this.pos[k + 1] = z; this.pos[k + 2] = y;
       const m = t.moisture(x, y);
       c.copy(dry).lerp(wet, m);
       const grain = 0.86 + 0.28 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)
@@ -113,7 +117,7 @@ class Dust {
         if (p.u > 1) { p.u -= 1; p.a = Math.random() * Math.PI * 2; p.r = Math.random(); }
         const rad = c.R * (0.18 + 0.72 * p.r) * (0.35 + 0.65 * p.u);
         const k = n * 3;
-        this.pos[k] = c.x + Math.cos(p.a + p.u * 5.0) * rad;
+        this.pos[k] = SX * (c.x + Math.cos(p.a + p.u * 5.0) * rad);
         this.pos[k + 1] = c.gz + 6 + (c.top - c.gz + 60) * p.u;
         this.pos[k + 2] = c.y + Math.sin(p.a + p.u * 5.0) * rad;
         this.alpha[n] = Math.min(1, (1 - p.u) * 1.7) * Math.min(1, c.W / 7);
@@ -156,7 +160,7 @@ class Clouds {
         if (!s || s.c !== c) s = this.seeds[n] = { c, a: Math.random() * 6.28, r: Math.random(), h: Math.random() };
         const rad = c.R * (0.25 + 0.85 * s.r);
         const k = n * 3;
-        this.pos[k] = c.x + Math.cos(s.a) * rad;
+        this.pos[k] = SX * (c.x + Math.cos(s.a) * rad);
         this.pos[k + 1] = c.top + 40 + s.h * 55;
         this.pos[k + 2] = c.y + Math.sin(s.a) * rad;
         this.alpha[n] = 0.75 * Math.min(1, (c.W - 6.5) / 2.5);
@@ -245,6 +249,16 @@ export class View {
   // 検査用: 座標を画面のピクセルへ落とす
   projectLocal(x, y, z) { return this._proj(new THREE.Vector3(x, y, z).applyMatrix4(this.glider.matrixWorld)); }
   projectWorld(x, y, z) { return this._proj(new THREE.Vector3(x, y, z)); }
+  // 検査用: 機首が向いている向きと、実際に進んでいる向き。ここがズレると機首が明後日を向く
+  gliderForward() {
+    const d = new THREE.Vector3(0, 0, 1).transformDirection(this.glider.matrixWorld);
+    return [d.x, d.y, d.z];
+  }
+  velocityDir(g) {
+    const SXv = SX;
+    const d = new THREE.Vector3(SXv * Math.sin(g.head), 0, Math.cos(g.head)).normalize();
+    return [d.x, d.y, d.z];
+  }
   _proj(v) {
     const q = v.clone().project(this.camera);
     const s = this.renderer.getSize(new THREE.Vector2());
@@ -253,11 +267,11 @@ export class View {
   update(g, dt, sun) {
     this.far.update(g.x, g.y);
     this.near.update(g.x, g.y);
-    this.water.position.x = g.x; this.water.position.z = g.y;
+    this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
-    this.glider.position.set(g.x, g.z, g.y);
-    this.glider.rotation.set(0, -g.head, -g.bank * 1.0, 'YXZ');
+    this.glider.position.set(SX * g.x, g.z, g.y);
+    this.glider.rotation.set(0, -g.head, g.bank, 'YXZ');
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
     const day = new THREE.Color(0xbfd0e0), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
     const sky = sun > 0.35
@@ -267,12 +281,12 @@ export class View {
     this.sunLight.intensity = 0.35 + 1.25 * sun;
     // 太陽は +Y の方角、高度は日照とともに下がる
     const elev = (2.5 + 11 * sun) * Math.PI / 180, D = 9000;
-    const sx = g.x, sy = g.z + Math.sin(elev) * D + 60, sz = g.y + Math.cos(elev) * D;
+    const sx = SX * g.x, sy = g.z + Math.sin(elev) * D + 60, sz = g.y + Math.cos(elev) * D;
     this.sunDisc.position.set(sx, sy, sz);
     this.sunDisc.scale.setScalar(300 + 260 * (1 - sun));
     this.sunDisc.lookAt(this.camera.position);
     this.sunDisc.material.color.setHSL(0.11, 0.55 * (1 - sun) + 0.08, 0.92 - 0.12 * (1 - sun));
-    this.sunLight.position.set(0, Math.sin(elev), Math.cos(elev));
+    this.sunLight.position.set(SX * 0.35, Math.sin(elev), Math.cos(elev));
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
     const back = 105, up = 28;
     // カメラは機体の向きに遅れてついていく。遅れる分だけ、機体が画面の中で振れて見える
@@ -282,8 +296,8 @@ export class View {
     while (e < -Math.PI) e += 2 * Math.PI;
     this.camHead += e * (1 - Math.exp(-dt / 0.75));
     const ch = this.camHead;
-    this.camera.position.set(g.x - Math.sin(ch) * back, g.z + up, g.y - Math.cos(ch) * back);
-    this.camera.lookAt(g.x + Math.sin(ch) * 320, g.z + 7 + 16 * tall, g.y + Math.cos(ch) * 320);
+    this.camera.position.set(SX * (g.x - Math.sin(ch) * back), g.z + up, g.y - Math.cos(ch) * back);
+    this.camera.lookAt(SX * (g.x + Math.sin(ch) * 320), g.z + 7 + 16 * tall, g.y + Math.cos(ch) * 320);
     this.camera.rotation.z += g.bank * 0.75;
     this.renderer.render(this.scene, this.camera);
   }

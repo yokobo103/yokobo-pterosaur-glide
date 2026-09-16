@@ -138,7 +138,9 @@ window.__slice = {
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),
-                     world: (x, y, z) => view.projectWorld(x, y, z) }; },
+                     world: (x, y, z) => view.projectWorld(x, y, z),
+                     noseDir: () => view.gliderForward(),
+                     velDir: () => view.velocityDir(glider) }; },
   reset,
 };
 
