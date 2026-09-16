@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>翼竜滑空 縦切り</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#0b0e13; font-family:system-ui,sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #hud { position:fixed; inset:0; pointer-events:none; padding:env(safe-area-inset-top) 16px 16px; }
+  .row { display:flex; justify-content:space-between; align-items:flex-start; padding-top:14px; }
+  .stat { font-variant-numeric:tabular-nums; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.8); }
+  .stat b { display:block; font-size:30px; line-height:1.05; font-weight:650; }
+  .stat span { font-size:11px; opacity:.75; letter-spacing:.09em; }
+  .right { text-align:right; }
+  /* 上昇率の帯。音を切っていても芯が分かるようにする */
+  #vario { position:fixed; right:14px; top:50%; transform:translateY(-50%); width:9px; height:190px;
+           border-radius:5px; background:rgba(255,255,255,.14); overflow:hidden; }
+  #varioFill { position:absolute; left:0; right:0; top:50%; height:0; background:#7fe08a; transition:none; }
+  #varioZero { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.55); }
+  #msg { position:fixed; left:0; right:0; top:44%; text-align:center; color:#fff; pointer-events:none; }
+  #msg b { font-size:26px; display:block; }
+  #msg span { font-size:13px; opacity:.8; }
+  #start { position:fixed; inset:0; display:grid; place-content:center; gap:14px; text-align:center;
+           background:rgba(6,9,14,.9); color:#fff; padding:24px; }
+  #start h1 { font-size:20px; font-weight:650; letter-spacing:.02em; }
+  #start p { font-size:13px; line-height:1.85; opacity:.82; max-width:30rem; }
+  #start kbd { background:rgba(255,255,255,.14); border-radius:4px; padding:1px 7px; font-size:12px; }
+  #start button { margin:6px auto 0; padding:13px 40px; font-size:15px; border:0; border-radius:999px;
+                  background:#e8eef7; color:#10151d; font-weight:650; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud">
+    <div class="row">
+      <div class="stat"><b id="dist">0.00</b><span>キョリ km</span></div>
+      <div class="stat right"><b id="alt">0</b><span>タカサ m</span></div>
+    </div>
+  </div>
+  <div id="vario"><div id="varioFill"></div><div id="varioZero"></div></div>
+  <div id="msg" class="hidden"><b id="msgTitle"></b><span id="msgSub"></span></div>
+  <div id="start">
+    <h1>翼竜滑空 — 縦切り試作</h1>
+    <p>
+      上がる空気（上昇気流）に乗って、どこまで行けるか。<br>
+      見つけかたは、舞い上がっている土ぼこりの柱。<br><br>
+      操作は左右だけ。<kbd>←</kbd><kbd>→</kbd>、スマホは画面の左半分／右半分を押しっぱなし。<br>
+      押している間だけ曲がります。<br><br>
+      右の帯と音が上がっていれば、上昇気流の芯に近い。<br>
+      日が傾くと空気は上がらなくなります。降りたところが記録。
+    </p>
+    <button id="go">はじめる</button>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
