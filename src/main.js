@@ -38,6 +38,7 @@ cv.addEventListener('pointerup', drop);
 cv.addEventListener('pointercancel', drop);
 
 function input(dt) {
+  if (window.__slice && typeof window.__slice.forceInput === 'number') return window.__slice.forceInput;
   if (auto) return auto.input(glider, dt);
   let v = 0;
   if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) v -= 1;
@@ -120,7 +121,7 @@ window.__slice = {
     return {
       x: glider.x, y: glider.y, z: glider.z, agl: glider.agl, vz: glider.vz,
       dist: glider.best, time: glider.time, sun: sunlight(glider.time),
-      bank: glider.bank, alive: glider.alive, ended,
+      bank: glider.bank, head: glider.head, alive: glider.alive, ended,
       thermalsNear: field.nearby(glider.x, glider.y, 4000).length,
     };
   },
@@ -134,6 +135,9 @@ window.__slice = {
     return out.sort((a, b) => a.d - b.d).slice(0, 12);
   },
   render() { view.update(glider, STEP, sunlight(glider.time)); hud(); },
+  forceInput: null,
+  _view() { return { glider: view.glider, camera: view.camera, THREE: view.THREE,
+                     camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points }; },
   reset,
 };
 

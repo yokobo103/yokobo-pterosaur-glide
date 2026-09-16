@@ -40,6 +40,8 @@ export class Terrain {
     for (const [dx, dy] of [[e, 0], [-e, 0], [0, e], [0, -e]]) m = Math.max(m, Math.abs(this.height(x + dx, y + dy) - z));
     return m / e;
   }
+  // 地表の細かい濃淡。動いていることが分かるための模様で、飛行には影響しない
+  grain(x, y) { return fbm(x / 230, y / 230, this.seed + 907, 2); }
   // 湿っているほど植生が濃く、地面が暖まらない = 上昇風が立たない
   moisture(x, y) {
     const d = Math.abs(x - this.riverX(y));

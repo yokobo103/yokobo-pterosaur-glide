@@ -38,6 +38,8 @@ class Ground {
       this.pos[k] = x; this.pos[k + 1] = z; this.pos[k + 2] = y;
       const m = t.moisture(x, y);
       c.copy(dry).lerp(wet, m);
+      const grain = 0.86 + 0.28 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)
+      c.multiplyScalar(grain);
       if (z < t.water + 1.2) c.lerp(sand, 0.7);
       this.col[k] = c.r; this.col[k + 1] = c.g; this.col[k + 2] = c.b;
     }
@@ -56,7 +58,7 @@ const DUST_VERT = [
   '  float dist = -(modelViewMatrix * vec4(position, 1.0)).z;',
   '  vA = aAlpha * clamp((dist - 30.0) / 150.0, 0.0, 1.0);',   // 近すぎる粒は消す(視界を塞ぐ)
   '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
-  '  gl_PointSize = clamp(uSize * (900.0 / max(-mv.z, 1.0)), 2.0, 26.0);',
+  '  gl_PointSize = clamp(uSize * (900.0 / max(-mv.z, 1.0)), 3.0, 30.0);',
   '  gl_Position = projectionMatrix * mv;',
   '}',
 ].join('\n');
@@ -75,7 +77,7 @@ const DUST_FRAG = [
 
 // 上昇気流は「舞い上がる土ぼこりの柱」としてだけ見せる。数字も矢印も出さない。
 class Dust {
-  constructor(field, max = 4200) {
+  constructor(field, max = 7000) {
     this.f = field; this.max = max;
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(max * 3);
@@ -124,6 +126,49 @@ class Dust {
   }
 }
 
+// 上昇気流の頭にできる雲。土ぼこりは近くでしか見えないので、遠距離の手がかりはこちら。
+class Clouds {
+  constructor(field, max = 900) {
+    this.f = field; this.max = max;
+    const g = new THREE.BufferGeometry();
+    this.pos = new Float32Array(max * 3);
+    this.alpha = new Float32Array(max);
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    g.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1));
+    this.geo = g;
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { uSize: { value: 150.0 }, uColor: { value: new THREE.Color(0xffffff) }, uFade: { value: 1 } },
+      vertexShader: DUST_VERT, fragmentShader: DUST_FRAG,
+      transparent: true, depthWrite: false,
+    });
+    this.points = new THREE.Points(g, this.mat);
+    this.points.frustumCulled = false;
+    this.seeds = [];
+  }
+  update(px, py, sun) {
+    let n = 0;
+    const per = 7;
+    for (const c of this.f.around(px, py, 9000)) {
+      if (c.W < 7.0) continue;                         // 強い柱にだけ雲がつく = 強さが遠くから読める
+      if (n + per > this.max) break;
+      for (let i = 0; i < per; i++, n++) {
+        let s = this.seeds[n];
+        if (!s || s.c !== c) s = this.seeds[n] = { c, a: Math.random() * 6.28, r: Math.random(), h: Math.random() };
+        const rad = c.R * (0.25 + 0.85 * s.r);
+        const k = n * 3;
+        this.pos[k] = c.x + Math.cos(s.a) * rad;
+        this.pos[k + 1] = c.top + 40 + s.h * 55;
+        this.pos[k + 2] = c.y + Math.sin(s.a) * rad;
+        this.alpha[n] = 0.75 * Math.min(1, (c.W - 6.5) / 2.5);
+      }
+    }
+    for (; n < this.max; n++) { this.alpha[n] = 0; this.pos[n * 3 + 1] = -9999; }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+    this.mat.uniforms.uFade.value = 0.3 + 0.7 * sun;
+  }
+}
+
 function makeGlider() {
   const g = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ color: 0xd8d2c4, side: THREE.DoubleSide });
@@ -144,6 +189,7 @@ function makeGlider() {
 
 export class View {
   constructor(el, terrain, field) {
+    this.THREE = THREE;   // 検査用
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     el.appendChild(this.renderer.domElement);
@@ -160,12 +206,19 @@ export class View {
     water.rotation.x = -Math.PI / 2; water.position.y = terrain.water + 0.6;
     water.frustumCulled = false;
     this.scene.add(water); this.water = water;
+    // 夕日。+Y(スコアが伸びる向き)の空に固定で置く。方位の手がかりと残り時間を兼ねる
+    this.sunDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 40),
+      new THREE.MeshBasicMaterial({ color: 0xfff0cc, fog: false, transparent: true, depthWrite: false }));
+    this.sunDisc.renderOrder = -1;
+    this.scene.add(this.sunDisc);
     this.dust = new Dust(field);
-    this.scene.add(this.dust.points);
+    this.clouds = new Clouds(field);
+    this.scene.add(this.dust.points, this.clouds.points);
     this.glider = makeGlider();
     this.scene.add(this.glider);
     this.fog = new THREE.FogExp2(0xbfd0e0, 0.000075);
     this.scene.fog = this.fog;
+    this.camHead = null;      // 機体の向きに遅れて追従する。旋回を「見える」ようにするため
     this.resize();
     addEventListener('resize', () => this.resize());
   }
@@ -180,6 +233,7 @@ export class View {
     this.near.update(g.x, g.y);
     this.water.position.x = g.x; this.water.position.z = g.y;
     this.dust.update(g.x, g.y, dt, sun);
+    this.clouds.update(g.x, g.y, sun);
     this.glider.position.set(g.x, g.z, g.y);
     this.glider.rotation.set(0, -g.head, -g.bank * 1.25, 'YXZ');
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
@@ -189,10 +243,25 @@ export class View {
       : dusk.clone().lerp(night, (0.35 - sun) / 0.35);
     this.scene.background = sky; this.fog.color = sky;
     this.sunLight.intensity = 0.35 + 1.25 * sun;
+    // 太陽は +Y の方角、高度は日照とともに下がる
+    const elev = (2.5 + 11 * sun) * Math.PI / 180, D = 9000;
+    const sx = g.x, sy = g.z + Math.sin(elev) * D + 60, sz = g.y + Math.cos(elev) * D;
+    this.sunDisc.position.set(sx, sy, sz);
+    this.sunDisc.scale.setScalar(300 + 260 * (1 - sun));
+    this.sunDisc.lookAt(this.camera.position);
+    this.sunDisc.material.color.setHSL(0.11, 0.55 * (1 - sun) + 0.08, 0.92 - 0.12 * (1 - sun));
+    this.sunLight.position.set(0, Math.sin(elev), Math.cos(elev));
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
     const back = 78, up = 38 + 14 * tall;
-    this.camera.position.set(g.x - Math.sin(g.head) * back, g.z + up, g.y - Math.cos(g.head) * back);
-    this.camera.lookAt(g.x + Math.sin(g.head) * 340, g.z - 34 + 46 * tall, g.y + Math.cos(g.head) * 340);
+    // カメラは機体の向きに遅れてついていく。遅れる分だけ、機体が画面の中で振れて見える
+    if (this.camHead === null) this.camHead = g.head;
+    let e = g.head - this.camHead;
+    while (e > Math.PI) e -= 2 * Math.PI;
+    while (e < -Math.PI) e += 2 * Math.PI;
+    this.camHead += e * (1 - Math.exp(-dt / 0.75));
+    const ch = this.camHead;
+    this.camera.position.set(g.x - Math.sin(ch) * back, g.z + up, g.y - Math.cos(ch) * back);
+    this.camera.lookAt(g.x + Math.sin(ch) * 340, g.z - 34 + 46 * tall, g.y + Math.cos(ch) * 340);
     this.camera.rotation.z += g.bank * 0.16;
     this.renderer.render(this.scene, this.camera);
   }
