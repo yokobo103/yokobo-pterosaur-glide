@@ -4,6 +4,18 @@ import * as THREE from 'three';
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
 const SX = -1;
 
+// カメラの型。酔いは人によるので、並べて選ぶ。?cam=a / b / c
+//   roll:    機体の傾きに対してカメラをどれだけ傾けるか(0=地平線は常に水平)
+//   yawTau:  機体の向きにカメラが遅れてついていく時間[秒]
+//   look:    注視点の高さ(機体からの差)。負だと見下ろす
+export const CAMS = {
+  a:   { name: '水平キープ',   back: 120, up: 34, ahead: 360, look: 4,   roll: 0.0,  yawTau: 0.6, fov: 70 },
+  b:   { name: '少しだけ傾く', back: 120, up: 34, ahead: 360, look: 4,   roll: 0.3,  yawTau: 0.6, fov: 70 },
+  c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66 },
+  // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
+  old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
+};
+
 // 地形は運ばず、その場で作る。プレイヤーに合わせて格子をスナップして高さを引き直す。
 class Ground {
   constructor(terrain, size, seg, opts = {}) {
@@ -207,12 +219,13 @@ function makeGlider() {
 }
 
 export class View {
-  constructor(el, terrain, field) {
+  constructor(el, terrain, field, cam = CAMS.a) {
+    this.cam = cam;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     el.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(62, 1, 2, 18000);
+    this.camera = new THREE.PerspectiveCamera(cam.fov, 1, 2, 18000);
     this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sunLight.position.set(-0.4, 1, 0.5);
     this.scene.add(this.sunLight, new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, 1.0));
@@ -259,6 +272,15 @@ export class View {
     const d = new THREE.Vector3(SXv * Math.sin(g.head), 0, Math.cos(g.head)).normalize();
     return [d.x, d.y, d.z];
   }
+  // 検査用: 地平線の傾き。世界の「上」が画面でどちらへ傾いて見えるかで測るので、左右の取り違えが起きない
+  // 0=水平 / 正=地平線の右側が上がっている(右バンクのときに正しい向き)
+  horizonLean() {
+    const f = new THREE.Vector3();
+    this.camera.getWorldDirection(f); f.y = 0; f.normalize();
+    const P = this.camera.position.clone().addScaledVector(f, 1000);
+    const a = this._proj(P), b = this._proj(P.clone().add(new THREE.Vector3(0, 100, 0)));
+    return Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])) * 57.3;
+  }
   _proj(v) {
     const q = v.clone().project(this.camera);
     const s = this.renderer.getSize(new THREE.Vector2());
@@ -288,17 +310,18 @@ export class View {
     this.sunDisc.material.color.setHSL(0.11, 0.55 * (1 - sun) + 0.08, 0.92 - 0.12 * (1 - sun));
     this.sunLight.position.set(SX * 0.35, Math.sin(elev), Math.cos(elev));
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
-    const back = 105, up = 28;
-    // カメラは機体の向きに遅れてついていく。遅れる分だけ、機体が画面の中で振れて見える
+    const C = this.cam;
+    // カメラは機体の向きに遅れてついていく
     if (this.camHead === null) this.camHead = g.head;
     let e = g.head - this.camHead;
     while (e > Math.PI) e -= 2 * Math.PI;
     while (e < -Math.PI) e += 2 * Math.PI;
-    this.camHead += e * (1 - Math.exp(-dt / 0.75));
+    this.camHead += e * (1 - Math.exp(-dt / C.yawTau));
     const ch = this.camHead;
-    this.camera.position.set(SX * (g.x - Math.sin(ch) * back), g.z + up, g.y - Math.cos(ch) * back);
-    this.camera.lookAt(SX * (g.x + Math.sin(ch) * 320), g.z + 7 + 16 * tall, g.y + Math.cos(ch) * 320);
-    this.camera.rotation.z += g.bank * 0.75;
+    this.camera.position.set(SX * (g.x - Math.sin(ch) * C.back), g.z + C.up, g.y - Math.cos(ch) * C.back);
+    this.camera.lookAt(SX * (g.x + Math.sin(ch) * C.ahead), g.z + C.look + 12 * tall, g.y + Math.cos(ch) * C.ahead);
+    // 右に傾いたらカメラも右に傾く(rotation.z は負が右)。直す前はここの符号が逆だった
+    this.camera.rotation.z -= g.bank * C.roll;
     this.renderer.render(this.scene, this.camera);
   }
 }

@@ -5,7 +5,8 @@ export const AIR = {
   Vcircle: 20,      // 旋回時(勝手に減速する)
   c1: 26.24, c2: 0.001602,   // 沈下 = c1/V + c2*V^2
   bankMax: 48 * Math.PI / 180,
-  bankRate: 1.6,    // 傾きの追従 [rad/s]
+  bankRate: 1.0,    // 傾きの追従 [rad/s]
+  inputTau: 0.25,   // 入力をなめらかにする[秒]。押した瞬間に傾きが跳ねると酔う
   g: 9.8,
   startAlt: 400,
   day: 720,         // 日没まで [s]
@@ -21,13 +22,15 @@ export class Glider {
     this.t = terrain; this.f = field;
     this.x = opts.x || 0; this.y = opts.y || 0;
     this.z = this.t.height(this.x, this.y) + (opts.alt ?? AIR.startAlt);
-    this.head = 0; this.bank = 0; this.time = 0;
+    this.head = 0; this.bank = 0; this.time = 0; this.inp = 0;
     this.vz = 0; this.lift = 0; this.alive = true; this.best = 0;
   }
   get agl() { return this.z - this.t.height(this.x, this.y); }
   step(dt, input) {
     if (!this.alive) return;
-    const want = Math.max(-1, Math.min(1, input)) * AIR.bankMax;
+    const k = AIR.inputTau > 0 ? 1 - Math.exp(-dt / AIR.inputTau) : 1;
+    this.inp += (Math.max(-1, Math.min(1, input)) - this.inp) * k;
+    const want = this.inp * AIR.bankMax;
     const db = Math.max(-AIR.bankRate * dt, Math.min(AIR.bankRate * dt, want - this.bank));
     this.bank += db;
     const a = Math.abs(this.bank) / AIR.bankMax;

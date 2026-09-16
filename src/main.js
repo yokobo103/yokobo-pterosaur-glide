@@ -1,11 +1,13 @@
 import { Terrain, ThermalField } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
-import { View } from './scene.js';
+import { View, CAMS } from './scene.js';
 import { Vario } from './audio.js';
 
 const q = new URLSearchParams(location.search);
 const SEED = Number(q.get('seed') ?? Math.floor(Math.random() * 9999));
 const HARNESS = q.has('harness');          // 検査用: rAFを止めて手でコマを進める
+const CAM_KEY = CAMS[q.get('cam')] ? q.get('cam') : 'a';
+if (CAM_KEY === 'old') { AIR.bankRate = 1.6; AIR.inputTau = 0; }   // 直す前の再現(比較測定用)
 
 const el = id => document.getElementById(id);
 const ui = {
@@ -16,7 +18,8 @@ const ui = {
 
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
-const view = new View(el('app'), terrain, field);
+const view = new View(el('app'), terrain, field, CAMS[CAM_KEY]);
+{ const h = document.querySelector('#start h1'); if (h) h.textContent += '（カメラ: ' + CAMS[CAM_KEY].name + '）'; }
 const vario = new Vario();
 let glider = new Glider(terrain, field);
 let running = false, ended = false;
@@ -140,7 +143,8 @@ window.__slice = {
                      local: (x, y, z) => view.projectLocal(x, y, z),
                      world: (x, y, z) => view.projectWorld(x, y, z),
                      noseDir: () => view.gliderForward(),
-                     velDir: () => view.velocityDir(glider) }; },
+                     velDir: () => view.velocityDir(glider),
+                     horizonLean: () => view.horizonLean() }; },
   reset,
 };
 
