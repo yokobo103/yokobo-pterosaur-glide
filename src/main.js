@@ -136,8 +136,9 @@ window.__slice = {
   },
   render() { view.update(glider, STEP, sunlight(glider.time)); hud(); },
   forceInput: null,
-  _view() { return { glider: view.glider, camera: view.camera, THREE: view.THREE,
-                     camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points }; },
+  _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
+                     local: (x, y, z) => view.projectLocal(x, y, z),
+                     world: (x, y, z) => view.projectWorld(x, y, z) }; },
   reset,
 };
 

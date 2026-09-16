@@ -40,14 +40,10 @@ console.log('=== 2. 右を押した2秒間に、画面の中で何が動くか =
 const yaw = await p.evaluate(() => {
   const s = window.__slice;
   s.auto(false); s.reset(); s.begin();
-  const T = s._view().THREE;
   const sample = () => {
     const v = s._view();
-    const scr = w => { const q = w.clone().project(v.camera); return [(q.x + 1) / 2 * 1280, (1 - (q.y + 1) / 2) * 800]; };
-    const c = scr(new T.Vector3(0, 0, 0).applyMatrix4(v.glider.matrixWorld));
-    const nose = scr(new T.Vector3(0, 0, 60).applyMatrix4(v.glider.matrixWorld));
-    const wing = scr(new T.Vector3(11, 0.6, -3).applyMatrix4(v.glider.matrixWorld));
-    const hL = scr(new T.Vector3(-4000, 60, 6000)), hR = scr(new T.Vector3(4000, 60, 6000));
+    const c = v.local(0, 0, 0), nose = v.local(0, 0, 60), wing = v.local(11, 0.6, -3);
+    const hL = v.world(-4000, 60, 6000), hR = v.world(4000, 60, 6000);
     return {
       // カメラの向きと機体の向きの差。これが「画面の中で機体が振れて見える」量
       yawOff: (s.state().head - v.camHead) * 57.3,

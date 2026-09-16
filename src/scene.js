@@ -189,7 +189,6 @@ function makeGlider() {
 
 export class View {
   constructor(el, terrain, field) {
-    this.THREE = THREE;   // 検査用
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     el.appendChild(this.renderer.domElement);
@@ -227,6 +226,14 @@ export class View {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+  }
+  // 検査用: 座標を画面のピクセルへ落とす
+  projectLocal(x, y, z) { return this._proj(new THREE.Vector3(x, y, z).applyMatrix4(this.glider.matrixWorld)); }
+  projectWorld(x, y, z) { return this._proj(new THREE.Vector3(x, y, z)); }
+  _proj(v) {
+    const q = v.clone().project(this.camera);
+    const s = this.renderer.getSize(new THREE.Vector2());
+    return [(q.x + 1) / 2 * s.x, (1 - (q.y + 1) / 2) * s.y];
   }
   update(g, dt, sun) {
     this.far.update(g.x, g.y);
