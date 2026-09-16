@@ -8,6 +8,10 @@
 
 ## 遊ぶ
 
+**公開URL: https://yokobo103.github.io/yokobo-pterosaur-glide/**
+
+手元で動かす場合:
+
 ```
 npm install
 npm run dev     # http://localhost:8141
@@ -63,7 +67,8 @@ tools/sheet.mjs   撮った絵を1枚に並べる
 
 ```
 npm run dev              # 別で起動しておく
-node tools/capture.mjs --touch
+node tools/capture.mjs --touch      # 手元
+node tools/verify-public.mjs        # 公開URLが本当に飛べるか
 ```
 
 - PC / スマホ の両サイズで、要所5場面の絵
