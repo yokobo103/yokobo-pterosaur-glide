@@ -34,7 +34,38 @@ const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b
 function rng(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 export class Terrain {
-  constructor(seed = 17, roughness = 1.0) { this.seed = seed; this.rough = roughness; this.water = 2.0; }
+  constructor(seed = 17, roughness = 1.0) { this.seed = seed; this.rough = roughness; this.water = 2.0; this.peakCells = new Map(); }
+  // 越えられない高い山。広い区画ごとに置くか決める。出発地点の近くには置かない
+  peakIn(ci, cj) {
+    const key = ci + ',' + cj;
+    if (this.peakCells.has(key)) return this.peakCells.get(key);
+    const r = rng(Math.imul(this.seed, 48271) ^ Math.imul(ci, 73856093) ^ Math.imul(cj, 19349663));
+    let pk = null;
+    if (r() < TUNE.peakChance) {
+      const S = TUNE.peakCell;
+      const x = (ci + 0.2 + 0.6 * r()) * S, y = (cj + 0.2 + 0.6 * r()) * S;
+      if (!(Math.abs(x) < 2500 && y > -2500 && y < 3500)) {
+        pk = { x, y, H: TUNE.peakMin + (TUNE.peakMax - TUNE.peakMin) * r(), R: 900 + 700 * r(), s: Math.floor(r() * 1000) };
+      }
+    }
+    this.peakCells.set(key, pk);
+    return pk;
+  }
+  peaks(x, y) {
+    if (!TUNE.peakChance) return 0;
+    const S = TUNE.peakCell, ci = Math.floor(x / S), cj = Math.floor(y / S);
+    let h = 0;
+    for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
+      const p = this.peakIn(i, j);
+      if (!p) continue;
+      const q = ((x - p.x) ** 2 + (y - p.y) ** 2) / (p.R * p.R);
+      if (q > 4) continue;
+      // なだらかな裾＋少しごつごつさせた頂
+      const rough = 0.8 + 0.35 * ridged((x - p.x) / 700, (y - p.y) / 700, this.seed + p.s, 3);
+      h = Math.max(h, p.H * Math.exp(-q * 1.6) * rough);
+    }
+    return h;
+  }
   riverX(y) { return 900 * Math.sin(y / 5200) + 380 * Math.sin(y / 1900 + this.seed * .37); }
   height(x, y) {
     const d = Math.abs(x - this.riverX(y));
@@ -64,6 +95,7 @@ export class Terrain {
       const r = ridged(x / (TUNE.mtnWave * 0.8), y / (TUNE.mtnWave * 0.8), this.seed + 83, 3);
       const shape = Math.max(0, 0.6 * b + 0.4 * r - 0.35) / 0.65;
       mtn = TUNE.mtnHeight * shape * shape * (0.4 + 0.6 * smoothstep(150, 1300, d));
+      mtn = Math.max(mtn, this.peaks(x, y));   // 高い山は丘の上に重ねる
     } else if (TUNE.mtn) {
       mtn = TUNE.mtnHeight * ridged(x / TUNE.mtnWave, y / (TUNE.mtnWave * 2.6), this.seed + 71)
         * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
@@ -98,6 +130,9 @@ export const TUNE = {
   // 山と尾根の上昇風(案C)。灰色の試作値。Astraに山を頼む前に、使える寸法をここで探る
   mtn: 0,             // 1で山あり。既定は今までどおり山なし(?world=ridge で山脈)
   mtnMode: 'noise',   // 'noise'=ノイズの山 / 'ranges'=つながった山脈
+  peakChance: 0,      // 高い山を置く確率(区画ごと)。丘の世界で使う
+  peakCell: 5000,     // 区画の大きさ [m]
+  peakMin: 650, peakMax: 950,   // 高い山の高さ [m]。上昇気流の雲底(地面から最大280m)では越えられない
   rangeOffsets: [2600, 5400],   // 川から山脈までの距離 [m]
   rangeWidth: 700,    // 山脈の裾の広さ [m]
   mtnHeight: 340,     // 山の高さの最大 [m]
@@ -115,7 +150,8 @@ export const TUNE = {
 export const WORLDS = {
   flat: {},
   // 既定。尾根の風は使わず、起伏そのものを「避けるか越えるか」の判断にする(所長の試走 2026-09-17)
-  hills: { mtn: 1, mtnMode: 'hills', mtnHeight: 220, mtnWave: 2400 },
+  // 高い山はたまに置く。越えられないので回り込む(所長 2026-09-17)。着地点の輪は「面白くない」で廃止
+  hills: { mtn: 1, mtnMode: 'hills', mtnHeight: 220, mtnWave: 2400, peakChance: 0.4 },
   ridge: { mtn: 1, mtnMode: 'ranges', mtnHeight: 550, rangeWidth: 700, windSpeed: 11, ridgeH: 240, leeCap: 2.5 },
 };
 

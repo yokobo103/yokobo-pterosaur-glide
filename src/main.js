@@ -174,7 +174,6 @@ window.__slice = {
   ridgeAt(x, y, z) { return field.ridgeAt(x, y, z, sunlight(glider.time)); },
   terrainHeight(x, y) { return terrain.height(x, y); },
   riverX(y) { return terrain.riverX(y); },
-  reach() { return view.reach; },
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),

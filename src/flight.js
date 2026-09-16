@@ -15,19 +15,6 @@ export const sink = V => AIR.c1 / V + AIR.c2 * V * V;
 export const glideRatio = V => V / sink(V);
 // 実際に届く距離は、上昇風の外の沈下こみで決まる。ここを忘れると届かない柱へ突っ込む。
 export const effGlide = V => V / (sink(V) + TUNE.ambient);
-// このまま同じ向きにまっすぐ滑空したら、どこで地面に着くか。上昇風は当てにしない。
-// 地面にぶつかる危険は、いつでも画面から読めるようにするための計算
-export function glideReach(g, maxDist = 9000, step = 60) {
-  const V = AIR.Vcruise, drop = step / effGlide(V);
-  const sx = Math.sin(g.head), sy = Math.cos(g.head);
-  let x = g.x, y = g.y, z = g.z;
-  for (let d = step; d <= maxDist; d += step) {
-    x += sx * step; y += sy * step; z -= drop;
-    const h = g.t.height(x, y);
-    if (z <= h + 2) return { x, y, z: h, dist: d, hit: true };
-  }
-  return { x, y, z: g.t.height(x, y), dist: maxDist, hit: false };
-}
 export const sunlight = t => { const u = Math.max(0, Math.min(1, t / AIR.day)); return Math.max(0, 1 - u * u); };
 
 export class Glider {

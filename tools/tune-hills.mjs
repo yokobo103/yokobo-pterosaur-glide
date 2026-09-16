@@ -4,9 +4,8 @@ import { Glider, Autopilot, AIR, sunlight } from '../src/flight.js';
 const SEEDS = [17, 41, 113, 7, 88, 3, 256, 901];
 const CASES = [
   { name: '起伏なし', set: WORLDS.flat },
-  { name: '丘 160m', set: { ...WORLDS.hills, mtnHeight: 160 } },
-  { name: '丘 220m', set: WORLDS.hills },
-  { name: '丘 300m', set: { ...WORLDS.hills, mtnHeight: 300 } },
+  { name: '丘だけ',   set: { ...WORLDS.hills, peakChance: 0 } },
+  { name: '丘＋高い山', set: WORLDS.hills },
 ];
 const base = { ...TUNE };
 const avg = a => a.reduce((s, v) => s + v, 0) / a.length;

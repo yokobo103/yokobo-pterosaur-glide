@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { TUNE } from './world.js';
-import { glideReach } from './flight.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
@@ -259,15 +258,6 @@ export class View {
     this.dust = new Dust(field);
     this.clouds = new Clouds(field);
     this.scene.add(this.dust.points, this.clouds.points);
-    // このまままっすぐ滑空したら着く場所。地面の輪と細い柱で示す
-    const reachMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.95,   // 土ぼこり(クリーム)と見分ける色
-      depthTest: false, depthWrite: false, fog: false, side: THREE.DoubleSide });
-    this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 1, 48), reachMat);
-    this.reachRing.rotation.x = -Math.PI / 2;
-    this.reachPole = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6), reachMat);
-    this.reachRing.renderOrder = this.reachPole.renderOrder = 5;
-    this.scene.add(this.reachRing, this.reachPole);
-    this.reach = null;
     this.glider = makeGlider();
     this.scene.add(this.glider);
     this.fog = new THREE.FogExp2(0xbfd0e0, 0.000075);
@@ -321,19 +311,6 @@ export class View {
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     this.glider.position.set(SX * g.x, g.z, g.y);
-    // 着地点: 旋回中は向きが変わり続けて意味がないので、傾けるほど薄くする
-    const r = this.reach = glideReach(g);
-    const fade = Math.max(0, 1 - Math.abs(g.bank) / (25 * Math.PI / 180));
-    const on = g.alive && r.hit && fade > 0.02;
-    this.reachRing.visible = this.reachPole.visible = on;
-    if (on) {
-      const k = Math.max(28, r.dist * 0.055);               // 遠くても見える大きさ(1km先で約55m)
-      this.reachRing.position.set(SX * r.x, r.z + 2, r.y);
-      this.reachRing.scale.setScalar(k);
-      this.reachPole.position.set(SX * r.x, r.z + k * 1.5, r.y);
-      this.reachPole.scale.set(k * 0.16, k * 3.0, k * 0.16);
-      this.reachRing.material.opacity = 0.95 * fade;
-    }
     this.glider.rotation.set(0, -g.head, g.bank, 'YXZ');
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
     const day = new THREE.Color(0xbfd0e0), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
