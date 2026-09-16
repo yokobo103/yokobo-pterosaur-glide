@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TUNE } from './world.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
@@ -60,8 +61,18 @@ class Ground {
       this.col[k] = c.r; this.col[k + 1] = c.g; this.col[k + 2] = c.b;
     }
     this.geo.attributes.position.needsUpdate = true;
-    this.geo.attributes.color.needsUpdate = true;
     this.geo.computeVertexNormals();
+    // 急な斜面は岩の色に。法線から出すので高さの再計算は要らない
+    const nrm = this.geo.attributes.normal.array;
+    for (let k = 0; k < this.col.length; k += 3) {
+      const steep = Math.max(0, Math.min(1, (1 - nrm[k + 1]) * 4.5));
+      if (steep > 0) {
+        this.col[k] += (0.46 - this.col[k]) * steep;
+        this.col[k + 1] += (0.42 - this.col[k + 1]) * steep;
+        this.col[k + 2] += (0.38 - this.col[k + 2]) * steep;
+      }
+    }
+    this.geo.attributes.color.needsUpdate = true;
     return true;
   }
 }
@@ -313,7 +324,13 @@ export class View {
     this.sunDisc.scale.setScalar(300 + 260 * (1 - sun));
     this.sunDisc.lookAt(this.camera.position);
     this.sunDisc.material.color.setHSL(0.11, 0.55 * (1 - sun) + 0.08, 0.92 - 0.12 * (1 - sun));
-    this.sunLight.position.set(SX * 0.35, Math.sin(elev), Math.cos(elev));
+    if (TUNE.windSpeed > 0) {
+      // 風のある世界では、光を風上(左)から低めに当てる。上昇風が出る斜面が明るく、風下は暗く見える
+      const wx = Math.sin(TUNE.windAngle), wy = Math.cos(TUNE.windAngle);
+      this.sunLight.position.set(SX * -wx, 0.55, -wy);
+    } else {
+      this.sunLight.position.set(SX * 0.35, Math.sin(elev), Math.cos(elev));
+    }
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
     const C = this.cam;
     // カメラは機体の向きに遅れてついていく

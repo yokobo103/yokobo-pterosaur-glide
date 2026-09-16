@@ -19,6 +19,17 @@ function fbm(x, y, seed, oct = 4) {
   for (let i = 0; i < oct; i++) { v += amp * noise2(x * f, y * f, seed + i * 977); norm += amp; amp *= .5; f *= 2; }
   return v / norm;
 }
+// 稜線がとがるノイズ。尾根は細く、谷は広くなる
+function ridged(x, y, seed, oct = 4) {
+  let v = 0, amp = 0.5, f = 1, wgt = 1, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    let n = 1 - Math.abs(noise2(x * f, y * f, seed + i * 131) * 2 - 1);
+    n *= n; n *= wgt; wgt = Math.min(1, n * 2);
+    v += n * amp; norm += amp; amp *= 0.5; f *= 2.1;
+  }
+  return v / norm;
+}
+const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // 種つき乱数 (チャンク生成用)
 function rng(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
@@ -32,7 +43,25 @@ export class Terrain {
     const terrace = 70.0 * fbm(x / 5200, y / 5200, this.seed, 3);
     const amp = this.rough * Math.min(1, Math.max(.08, d / 700));
     const detail = 34.0 * amp * (fbm(x / 900, y / 900, this.seed + 11) - .5);
-    return this.water + bed + bank + terrace + detail;
+    // 山: 川から離れるほど立ち上がる。稜線は進行方向(+y)に長く伸ばし、横風が長い斜面に当たるようにする
+    let mtn = 0;
+    if (TUNE.mtn && TUNE.mtnMode === 'ranges') {
+      // 進行方向に沿ってつながった山脈。ところどころ鞍部で低くなる(Astraに頼む山の形の仮置き)
+      const rx = this.riverX(y);
+      for (let k = 0; k < TUNE.rangeOffsets.length; k++) {
+        for (const side of [-1, 1]) {
+          const xk = rx + side * TUNE.rangeOffsets[k] + 260 * Math.sin(y / 2300 + k * 1.7 + side);
+          const prof = Math.exp(-(((x - xk) / TUNE.rangeWidth) ** 2));
+          const saddle = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(y / 2600 + k * 2.1 + side * 0.8)) ** 1.5;
+          mtn += TUNE.mtnHeight * prof * saddle;
+        }
+      }
+      mtn += 0.12 * TUNE.mtnHeight * ridged(x / 1400, y / 1400, this.seed + 71) * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
+    } else if (TUNE.mtn) {
+      mtn = TUNE.mtnHeight * ridged(x / TUNE.mtnWave, y / (TUNE.mtnWave * 2.6), this.seed + 71)
+        * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
+    }
+    return this.water + bed + bank + terrace + detail + mtn;
   }
   slope(x, y, e = 30) {
     const z = this.height(x, y);
@@ -59,6 +88,26 @@ export const TUNE = {
   ceilMin: 150, ceilMax: 280, // 地面からの雲底 [m] — 1本あたりの滞在を短くする
   ambient: 0.50,      // 上昇風の外の沈下 [m/s] — 上がった空気はどこかで下りる
   ring: 0.9,          // 上昇風のまわりの沈下の輪
+  // 山と尾根の上昇風(案C)。灰色の試作値。Astraに山を頼む前に、使える寸法をここで探る
+  mtn: 0,             // 1で山あり。既定は今までどおり山なし(?world=ridge で山脈)
+  mtnMode: 'noise',   // 'noise'=ノイズの山 / 'ranges'=つながった山脈
+  rangeOffsets: [2600, 5400],   // 川から山脈までの距離 [m]
+  rangeWidth: 700,    // 山脈の裾の広さ [m]
+  mtnHeight: 340,     // 山の高さの最大 [m]
+  mtnWave: 3400,      // 尾根の間隔の目安 [m]
+  mtnStart: 900,      // 川からこの距離で山が立ち上がり始める [m]
+  mtnRamp: 1600,
+  windSpeed: 0,       // 風速 [m/s]。既定は無風
+  windAngle: Math.PI / 2,   // 風の向き。0=+y(進行方向), π/2=+x(横風)
+  ridgeK: 1.0,        // 斜面に当たった風がどれだけ上向きになるか
+  ridgeH: 140,        // 斜面からこの高さで上昇風が弱まる [m]
+  ridgeCap: 6,        // 尾根の上昇風の上限 [m/s]
+};
+
+// 尾根の試作で、尾根沿いに飛べると測れた山脈の設定(tools/ridge-band.mjs: 86%の区間で高度を保てる・最長2.5km・斜面から150m)
+export const WORLDS = {
+  flat: {},
+  ridge: { mtn: 1, mtnMode: 'ranges', mtnHeight: 550, rangeWidth: 700, windSpeed: 11, ridgeH: 240, leeCap: 2.5 },
 };
 
 export class ThermalField {
@@ -107,7 +156,20 @@ export class ThermalField {
       if (v > best) best = v;
     }
     if (best < 0) best = Math.max(best, -TUNE.ambient * 2.2);
-    return (best === -1e9 ? 0 : best) * sun - TUNE.ambient;
+    return (best === -1e9 ? 0 : best) * sun - TUNE.ambient + this.ridgeAt(x, y, z, sun);
+  }
+  // 尾根の上昇風: 風が斜面を登る向きに当たれば上がり、風下側では下がる。
+  // 日が暮れると風も弱まる(尾根だけで永遠に飛べないように)
+  ridgeAt(x, y, z, sun = 1) {
+    const ws = TUNE.windSpeed * (0.35 + 0.65 * sun);
+    if (ws <= 0 || TUNE.ridgeK <= 0) return 0;
+    const t = this.t, e = 35;
+    const gx = (t.height(x + e, y) - t.height(x - e, y)) / (2 * e);
+    const gy = (t.height(x, y + e) - t.height(x, y - e)) / (2 * e);
+    const wx = Math.sin(TUNE.windAngle), wy = Math.cos(TUNE.windAngle);
+    const agl = Math.max(0, z - t.height(x, y));
+    const up = TUNE.ridgeK * ws * (wx * gx + wy * gy);
+    return Math.max(-(TUNE.leeCap ?? TUNE.ridgeCap), Math.min(TUNE.ridgeCap, up)) * Math.exp(-agl / TUNE.ridgeH);
   }
 
   nearby(x, y, maxd = 7000, aheadOnly = true, cone = 900) {

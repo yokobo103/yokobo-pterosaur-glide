@@ -68,6 +68,12 @@ export class Autopilot {
       if (!desperate && c.W * sun < this.Wmin) continue;
       const arrive = g.z - d / effGlide(AIR.Vcruise);
       if (arrive < c.gz + (desperate ? 25 : need)) continue;
+      let blocked = false;                                   // 途中の山を越えられるか
+      for (let s = 150; s < d; s += 150) {
+        const px = g.x + (c.x - g.x) * s / d, py = g.y + (c.y - g.y) * s / d;
+        if (g.z - s / effGlide(AIR.Vcruise) < g.t.height(px, py) + 30) { blocked = true; break; }
+      }
+      if (blocked) continue;
       const s = (c.y - g.y) - this.lat * Math.abs(c.x - g.x) + (desperate ? 80000 / Math.max(d, 1) : 0);
       if (s > best) { best = s; tgt = c; }
     }
@@ -78,6 +84,29 @@ export class Autopilot {
     while (e > Math.PI) e -= 2 * Math.PI;
     while (e < -Math.PI) e += 2 * Math.PI;
     return Math.max(-1, Math.min(1, e * 2.4));
+  }
+  // 向き h へ直進したときに、静かな空気を滑るのと比べてどれだけ得か(距離換算)。ぶつかるなら大きく負
+  gainAlong(g, h, sun, secs = 36, step = 3) {
+    const V = AIR.Vcruise, ge = effGlide(V);
+    let x = g.x, y = g.y, z = g.z;
+    for (let t = 0; t < secs; t += step) {
+      x += V * Math.sin(h) * step; y += V * Math.cos(h) * step;
+      z += (g.f.ridgeAt(x, y, z, sun) - TUNE.ambient - sink(V)) * step;   // 尾根の上昇風だけで判断する(上昇気流は回って使う)
+      if (z - g.t.height(x, y) < 35) return -1e7;
+    }
+    // 静かな空気を同じ時間滑った場合の高さと比べた、得した高さを距離に換算
+    const stillZ = g.z - (sink(V) + TUNE.ambient) * secs;
+    return (z - stillZ) * ge;
+  }
+  bestRidge(g, sun) {
+    let best = -1e18, bestH = 0, bestGain = -1e18;
+    for (let k = -7; k <= 7; k++) {
+      const h = k * 12 * Math.PI / 180;
+      const gain = this.gainAlong(g, h, sun);
+      const s = gain + 0.35 * 36 * AIR.Vcruise * Math.cos(h);   // 前へ進む向きを少し好む
+      if (s > best) { best = s; bestH = h; bestGain = gain; }
+    }
+    return { h: bestH, gain: bestGain };
   }
   input(g, dt) {
     const sun = sunlight(g.time);
@@ -98,6 +127,16 @@ export class Autopilot {
         const ax = -ry + rx * radial, ay = rx + ry * radial;
         return this.steerTo(g, g.x + ax * 100, g.y + ay * 100);
       }
+    }
+    // 尾根沿いに、静かな空気より明らかに得な向きがあればそちらを飛ぶ
+    if (g.time >= (this.nextRidge || 0)) {
+      this.nextRidge = g.time + 1.0;
+      this.ridge = this.bestRidge(g, sun);
+    }
+    const nearTarget = this.target && Math.hypot(this.target.x - g.x, this.target.y - g.y) < 1.5 * this.target.R;
+    if (this.ridge && this.ridge.gain > 250 && !nearTarget) {
+      this.stats.ridgeT = (this.stats.ridgeT || 0) + dt;
+      return this.steerTo(g, g.x + Math.sin(this.ridge.h) * 1000, g.y + Math.cos(this.ridge.h) * 1000);
     }
     if (!this.target) this.target = this.pick(g, sun);
     const c = this.target;

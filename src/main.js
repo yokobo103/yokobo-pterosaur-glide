@@ -1,4 +1,4 @@
-import { Terrain, ThermalField } from './world.js';
+import { Terrain, ThermalField, TUNE, WORLDS } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
 import { View, CAMS } from './scene.js';
 import { Vario } from './audio.js';
@@ -23,6 +23,14 @@ const ui = {
   start: el('start'), go: el('go'),
 };
 
+const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'flat';
+Object.assign(TUNE, WORLDS[WORLD]);
+if (WORLD === 'ridge') {
+  const p = document.querySelector('#start p');
+  if (p) p.insertAdjacentHTML('beforeend',
+    '<br><br><b>山脈の世界：</b>風は左から吹いています。山の<b>左側の斜面</b>に沿って飛ぶと上がります。' +
+    '反対側の斜面は下がる空気。鞍部で途切れたら、上昇気流か次の尾根へ。');
+}
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
 const view = new View(el('app'), terrain, field, camOf(CAM_KEY));
@@ -128,6 +136,7 @@ ui.go.addEventListener('click', () => {
 // ---- 検査用の口。画面が出ない環境でもここから回す ----
 window.__slice = {
   seed: SEED,
+  world: WORLD,
   camKey: () => CAM_KEY,
   camRoll: () => view.cam.roll,
   begin() { ui.start.classList.add('hidden'); running = true; },
@@ -157,6 +166,14 @@ window.__slice = {
     return out.sort((a, b) => a.d - b.d).slice(0, 12);
   },
   render() { view.update(glider, STEP, sunlight(glider.time)); hud(); },
+  // 検査用: 好きな場所・高さ(地面から)・向きに置く
+  place(x, y, agl, head = 0) {
+    glider.x = x; glider.y = y; glider.z = terrain.height(x, y) + agl; glider.head = head;
+    glider.bank = 0; glider.inp = 0; glider.alive = true; view.camHead = head;
+  },
+  ridgeAt(x, y, z) { return field.ridgeAt(x, y, z, sunlight(glider.time)); },
+  terrainHeight(x, y) { return terrain.height(x, y); },
+  riverX(y) { return terrain.riverX(y); },
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),
