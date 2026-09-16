@@ -38,7 +38,7 @@ await p.waitForFunction(() => !!window.__slice);
 check('前回の「見下ろし」を覚えている', await p.evaluate(() => window.__slice.camKey()) === 'c');
 console.log('■ 「少し傾く」をタップして、はじめる');
 check('指がボタンに当たる', await tap('#cams button[data-cam="b"]'));
-check('傾きの強さ 0.15', await p.evaluate(() => window.__slice.camRoll()) === 0.15);
+check('傾きの強さ 0.1', await p.evaluate(() => window.__slice.camRoll()) === 0.1);
 check('「はじめる」に指が当たる', await tap('#go'));
 check('スタート画面が閉じる', await p.$eval('#start', e => e.classList.contains('hidden')));
 console.log('■ URLで指定したときはURLが優先');

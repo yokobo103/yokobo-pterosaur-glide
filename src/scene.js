@@ -10,7 +10,7 @@ const SX = -1;
 //   look:    注視点の高さ(機体からの差)。負だと見下ろす
 export const CAMS = {
   a:   { name: '水平キープ',   back: 120, up: 34, ahead: 360, look: 4,   roll: 0.0,  yawTau: 0.6, fov: 70 },
-  b:   { name: '少しだけ傾く', back: 120, up: 34, ahead: 360, look: 4,   roll: 0.15, yawTau: 0.6, fov: 70 },  // 0.3(14度)は酔った
+  b:   { name: '少しだけ傾く', back: 120, up: 34, ahead: 360, look: 4,   roll: 0.1,  yawTau: 0.6, fov: 70 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
   c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66 },
   // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
   old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
