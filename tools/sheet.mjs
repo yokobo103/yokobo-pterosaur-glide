@@ -46,7 +46,7 @@ const html = async () => {
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 1200 });
-await page.setContent(await html(), { waitUntil: 'networkidle0' });
+await page.setContent(await html(), { waitUntil: 'networkidle0', timeout: 120000 });
 const out = path.join(SHOTS, '_比較シート.png');
 await page.screenshot({ path: out, fullPage: true });
 await browser.close();

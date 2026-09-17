@@ -7,7 +7,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
 const p = await b.newPage();
 await p.setViewport({ width: 1280, height: 800 });
 const CAM = (process.argv.find(a => a.startsWith('--cam=')) || '--cam=a').slice(6);
-await p.goto(BASE + '?harness&seed=17&cam=' + CAM, { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?harness&seed=17&cam=' + CAM, { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 console.log('測る対象:', BASE, 'カメラ', CAM);
 

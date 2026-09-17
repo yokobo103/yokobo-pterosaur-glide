@@ -7,7 +7,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
 for (const size of [{n:'スマホ縦',w:390,h:844},{n:'PC横',w:1280,h:800}]) {
   const p = await b.newPage();
   await p.setViewport({ width: size.w, height: size.h });
-  await p.goto(BASE + '?harness&seed=17', { waitUntil: 'networkidle0' });
+  await p.goto(BASE + '?harness&seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
   await p.waitForFunction(() => !!window.__slice);
   const r = await p.evaluate((W, H) => {
     const s = window.__slice; s.auto(false); s.reset(); s.begin();

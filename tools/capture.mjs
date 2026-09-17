@@ -49,7 +49,7 @@ async function main() {
   for (const size of SIZES) {
     console.log(`\n=== ${size.name} (${size.w}x${size.h}) ===`);
     const page = await newPage(browser, size);
-    await page.goto(URL + '?harness&seed=17', { waitUntil: 'networkidle0' });
+    await page.goto(URL + '?harness&seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
     await page.waitForFunction(() => !!window.__slice, { timeout: 15000 });
 
     await shot(page, `${size.name}-00-入口`);
@@ -85,7 +85,7 @@ async function main() {
   if (has('--touch')) {
     console.log('\n=== 指で操作できるか (本物のタッチ) ===');
     const page = await newPage(browser, SIZES[1]);
-    await page.goto(URL + '?harness&seed=17', { waitUntil: 'networkidle0' });
+    await page.goto(URL + '?harness&seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
     await page.waitForFunction(() => !!window.__slice);
     await page.evaluate(() => window.__slice.begin());
     const cdp = await page.createCDPSession();

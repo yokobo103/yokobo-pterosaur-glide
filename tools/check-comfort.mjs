@@ -9,7 +9,7 @@ const rows = [];
 for (const key of KEYS) {
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 844 });
-  await p.goto(`${BASE}?harness&seed=17&cam=${key}`, { waitUntil: 'networkidle0' });
+  await p.goto(`${BASE}?harness&seed=17&cam=${key}`, { waitUntil: 'networkidle0', timeout: 120000 });
   await p.waitForFunction(() => !!window.__slice);
   const r = await p.evaluate(() => {
     const s = window.__slice; s.auto(false); s.reset(); s.begin();

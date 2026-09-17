@@ -8,9 +8,9 @@ await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
 const ok = c => c ? 'PASS' : 'FAIL';
 let fails = 0; const check = (label, c) => { if (!c) fails++; console.log(`  ${label} ${ok(c)}`); };
 
-await p.goto(BASE + '?seed=17', { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.evaluate(() => { try { localStorage.removeItem('glide.cam'); } catch (e) {} });
-await p.goto(BASE + '?seed=17', { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 await p.screenshot({ path: 'screenshots/start-カメラ選択.png' });
 
@@ -33,7 +33,7 @@ check('カメラが見下ろしになる', await p.evaluate(() => window.__slice
 check('選んだボタンだけが選択表示', await p.evaluate(() =>
   [...document.querySelectorAll('#cams button')].map(b => b.getAttribute('aria-checked')).join() === 'false,true,false'));
 console.log('■ 開き直す');
-await p.reload({ waitUntil: 'networkidle0' });
+await p.reload({ waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 check('前回の「見下ろし」を覚えている', await p.evaluate(() => window.__slice.camKey()) === 'c');
 console.log('■ 「少し傾く」をタップして、はじめる');
@@ -42,7 +42,7 @@ check('傾きの強さ 0.1', await p.evaluate(() => window.__slice.camRoll()) ==
 check('「はじめる」に指が当たる', await tap('#go'));
 check('スタート画面が閉じる', await p.$eval('#start', e => e.classList.contains('hidden')));
 console.log('■ URLで指定したときはURLが優先');
-await p.goto(BASE + '?seed=17&cam=a', { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?seed=17&cam=a', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 check('?cam=a が効く', await p.evaluate(() => window.__slice.camKey()) === 'a');
 await b.close();

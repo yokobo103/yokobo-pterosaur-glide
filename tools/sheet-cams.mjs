@@ -8,7 +8,7 @@ const imgs = [];
 for (const [k, name] of KEYS) {
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 844 });
-  await p.goto(`${process.env.GLIDE_BASE || 'http://localhost:8141/'}?harness&seed=17&cam=${k}`, { waitUntil: 'networkidle0' });
+  await p.goto(`${process.env.GLIDE_BASE || 'http://localhost:8141/'}?harness&seed=17&cam=${k}`, { waitUntil: 'networkidle0', timeout: 120000 });
   await p.waitForFunction(() => !!window.__slice);
   await p.evaluate(() => { const s=window.__slice; s.auto(false); s.reset(); s.begin(); for(let i=0;i<150;i++) s.step(1/60,true); });
   const a = await p.screenshot({ encoding: 'base64' });
@@ -27,7 +27,7 @@ await p.setContent(`<meta charset="utf-8"><style>
  h1{font-size:18px;margin:0 0 14px} .row{display:flex;gap:22px} .col{flex:1}
  h2{font-size:14px;margin:0 0 8px} .pair{display:flex;gap:8px} figure{margin:0;flex:1}
  img{width:100%;border-radius:6px;display:block} figcaption{font-size:11px;opacity:.7;margin-top:4px}
-</style><h1>カメラの型（スマホ縦・同じ場面）</h1><div class="row">${cells}</div>`, { waitUntil: 'networkidle0' });
+</style><h1>カメラの型（スマホ縦・同じ場面）</h1><div class="row">${cells}</div>`, { waitUntil: 'networkidle0', timeout: 120000 });
 await p.screenshot({ path: 'screenshots/_カメラ比較.png', fullPage: true });
 await b.close();
 console.log('screenshots/_カメラ比較.png');

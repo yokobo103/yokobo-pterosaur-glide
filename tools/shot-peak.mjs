@@ -6,7 +6,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 300000,
 const p = await b.newPage();
 await p.setViewport({ width: 390, height: 844 });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.goto(BASE + '?harness&seed=17&cam=a', { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?harness&seed=17&cam=a', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 const info = await p.evaluate(() => {
   const s = window.__slice; s.auto(false); s.reset(); s.begin();

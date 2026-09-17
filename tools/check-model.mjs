@@ -10,7 +10,7 @@ for (const size of ['1', '2', '3']) {
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 844 });
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto(`${BASE}?harness&seed=17&cam=a&size=${size}`, { waitUntil: 'networkidle0' });
+  await p.goto(`${BASE}?harness&seed=17&cam=a&size=${size}`, { waitUntil: 'networkidle0', timeout: 120000 });
   await p.waitForFunction(() => window.__slice && window.__slice.modelReady(), { timeout: 30000 });
   console.log(`■ size=${size}`);
   const straight = await p.evaluate(() => {
@@ -47,7 +47,7 @@ h1{font-size:18px;margin:0 0 14px}.row{display:flex;gap:22px}.col{flex:1}h2{font
 figure{margin:0;flex:1}img{width:100%;border-radius:6px;display:block}figcaption{font-size:11px;opacity:.7;margin-top:4px}</style>
 <h1>翼竜の大きさ（スマホ縦・水平キープ）</h1><div class="row">${shots.map(s => `<div class="col"><h2>${names[s.size]}</h2><div class="pair">
 <figure><img src="data:image/png;base64,${s.straight}"><figcaption>まっすぐ</figcaption></figure>
-<figure><img src="data:image/png;base64,${s.turn}"><figcaption>右へ2.5秒旋回</figcaption></figure></div></div>`).join('')}</div>`, { waitUntil: 'networkidle0' });
+<figure><img src="data:image/png;base64,${s.turn}"><figcaption>右へ2.5秒旋回</figcaption></figure></div></div>`).join('')}</div>`, { waitUntil: 'networkidle0', timeout: 120000 });
 await p.screenshot({ path: 'screenshots/_翼竜の大きさ比較.png', fullPage: true });
 await b.close();
 console.log(fails ? `${fails}件 FAIL` : '全件 PASS');

@@ -8,7 +8,7 @@ let fails = 0; const check = (l, c) => { if (!c) fails++; console.log(`  ${l} ${
 const p = await b.newPage();
 await p.setViewport({ width: 390, height: 844 });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.goto(BASE + '?harness&seed=17&cam=a&world=ridge', { waitUntil: 'networkidle0' });
+await p.goto(BASE + '?harness&seed=17&cam=a&world=ridge', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 check('山脈の世界になっている', await p.evaluate(() => window.__slice.world) === 'ridge');
 const r = await p.evaluate(() => {

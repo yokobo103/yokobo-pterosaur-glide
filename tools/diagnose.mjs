@@ -9,7 +9,7 @@ const b = await puppeteer.launch({
 });
 const p = await b.newPage();
 await p.setViewport({ width: 1280, height: 800 });
-await p.goto(URL, { waitUntil: 'networkidle0' });
+await p.goto(URL, { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 
 // ---------- 1. 右を押してから、実際に向きが変わるまで ----------
