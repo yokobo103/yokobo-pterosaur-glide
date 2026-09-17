@@ -1,7 +1,7 @@
 // 左右の符号の検査。「bankが正か」ではなく「画面がどっちに回るか」を見る。
 import puppeteer from 'puppeteer';
 const BASE = process.argv.includes('--public')
-  ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : 'http://localhost:8141/';
+  ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const p = await b.newPage();

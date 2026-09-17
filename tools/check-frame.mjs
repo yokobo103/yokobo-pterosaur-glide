@@ -1,7 +1,7 @@
 // 旋回を続けたとき、自機が画面から出ないか。旋回は走行の44%を占めるので外れたら致命的。
 import puppeteer from 'puppeteer';
 const LOCAL = !process.argv.includes('--public');
-const BASE = LOCAL ? 'http://localhost:8141/' : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
+const BASE = LOCAL ? (process.env.GLIDE_BASE || 'http://localhost:8141/') : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 for (const size of [{n:'スマホ縦',w:390,h:844},{n:'PC横',w:1280,h:800}]) {

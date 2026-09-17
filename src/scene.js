@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { TUNE } from './world.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
@@ -9,9 +10,17 @@ const SX = -1;
 //   roll:    機体の傾きに対してカメラをどれだけ傾けるか(0=地平線は常に水平)
 //   yawTau:  機体の向きにカメラが遅れてついていく時間[秒]
 //   look:    注視点の高さ(機体からの差)。負だと見下ろす
+// 翼竜の見せる大きさ。RH02は実寸で翼開長2.2m。飛び方の計算は変えず、見た目とカメラの距離だけ変える
+//   scale: モデルの拡大率 / cam: カメラの距離の倍率
+export const SIZES = {
+  1: { name: '実寸2.2m・カメラを寄せる', scale: 1.0, cam: 0.15 },
+  2: { name: '翼開長10m',               scale: 4.6, cam: 0.5 },
+  3: { name: '翼開長22m(灰色の箱と同じ)', scale: 10,  cam: 1.0 },
+};
+
 export const CAMS = {
-  a:   { name: '水平キープ',   back: 120, up: 34, ahead: 360, look: 4,   roll: 0.0,  yawTau: 0.6, fov: 70 },
-  b:   { name: '少しだけ傾く', back: 120, up: 34, ahead: 360, look: 4,   roll: 0.1,  yawTau: 0.6, fov: 70 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
+  a:   { name: '水平キープ',   back: 120, up: 52, ahead: 360, look: -6,  roll: 0.0,  yawTau: 0.6, fov: 70 },  // 本物の翼竜では up34 だと翼を真横から見て細い線になった
+  b:   { name: '少しだけ傾く', back: 120, up: 52, ahead: 360, look: -6,  roll: 0.1,  yawTau: 0.6, fov: 70 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
   c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66 },
   // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
   old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
@@ -232,13 +241,13 @@ function makeGlider() {
 }
 
 export class View {
-  constructor(el, terrain, field, cam = CAMS.a) {
-    this.cam = cam;
+  constructor(el, terrain, field, cam = CAMS.a, size = SIZES[2]) {
+    this.cam = cam; this.size = size;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     el.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(cam.fov, 1, 2, 18000);
+    this.camera = new THREE.PerspectiveCamera(cam.fov, 1, 0.5, 18000);
     this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
     this.sunLight.position.set(-0.4, 1, 0.5);
     this.scene.add(this.sunLight, new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, 1.0));
@@ -258,13 +267,43 @@ export class View {
     this.dust = new Dust(field);
     this.clouds = new Clouds(field);
     this.scene.add(this.dust.points, this.clouds.points);
-    this.glider = makeGlider();
+    // 機体: 外側のグループが向きと傾きを持つ(+Zが機首)。中身は読み込むまで灰色の箱
+    this.glider = new THREE.Group();
+    this.placeholder = makeGlider();
+    this.placeholder.scale.setScalar(size.scale / 10);   // 灰色の箱は翼開長22m相当
+    this.glider.add(this.placeholder);
     this.scene.add(this.glider);
+    this.mixer = null; this.model = null; this.modelReady = false;
     this.fog = new THREE.FogExp2(0xbfd0e0, 0.000075);
     this.scene.fog = this.fog;
     this.camHead = null;      // 機体の向きに遅れて追従する。旋回を「見える」ようにするため
     this.resize();
     addEventListener('resize', () => this.resize());
+  }
+  // 本物の翼竜を読み込む。RH02は機首が-Zなので180度回して+Zへそろえる(骨の位置で確認済み)
+  loadModel(url) {
+    new GLTFLoader().load(url, gltf => {
+      const m = gltf.scene;
+      m.rotation.y = Math.PI;
+      m.position.y = -0.35 * this.size.scale;     // 胴体の高さを機体の中心へ
+      m.scale.setScalar(this.size.scale);
+      m.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+      this.glider.add(m);
+      this.placeholder.visible = false;
+      this.model = m;
+      this.mixer = new THREE.AnimationMixer(m);
+      this.clips = Object.fromEntries(gltf.animations.map(c => [c.name, c]));
+      if (this.clips.Glide_Loop) this.mixer.clipAction(this.clips.Glide_Loop).play();
+      this.modelReady = true;
+    }, undefined, err => { console.error('翼竜の読み込みに失敗。灰色の箱のまま飛ぶ', err); });
+  }
+  // 検査用: 骨の画面上の位置とカメラからの距離
+  boneInfo(name) {
+    if (!this.model) return null;
+    const o = this.model.getObjectByName(name);
+    if (!o) return null;
+    const w = new THREE.Vector3(); o.getWorldPosition(w);
+    return { px: this._proj(w), dist: w.distanceTo(this.camera.position) };
   }
   setCam(cam) {
     this.cam = cam;
@@ -334,7 +373,8 @@ export class View {
       this.sunLight.position.set(SX * 0.35, Math.sin(elev), Math.cos(elev));
     }
     const tall = Math.max(0, 1 - this.camera.aspect);      // 縦持ちほど大きい
-    const C = this.cam;
+    const C = this.cam, k = this.size.cam;
+    if (this.mixer) this.mixer.update(dt);
     // カメラは機体の向きに遅れてついていく
     if (this.camHead === null) this.camHead = g.head;
     let e = g.head - this.camHead;
@@ -342,8 +382,8 @@ export class View {
     while (e < -Math.PI) e += 2 * Math.PI;
     this.camHead += e * (1 - Math.exp(-dt / C.yawTau));
     const ch = this.camHead;
-    this.camera.position.set(SX * (g.x - Math.sin(ch) * C.back), g.z + C.up, g.y - Math.cos(ch) * C.back);
-    this.camera.lookAt(SX * (g.x + Math.sin(ch) * C.ahead), g.z + C.look + 12 * tall, g.y + Math.cos(ch) * C.ahead);
+    this.camera.position.set(SX * (g.x - Math.sin(ch) * C.back * k), g.z + C.up * k, g.y - Math.cos(ch) * C.back * k);
+    this.camera.lookAt(SX * (g.x + Math.sin(ch) * C.ahead), g.z + (C.look + 12 * tall) * k, g.y + Math.cos(ch) * C.ahead);
     // 右に傾いたらカメラも右に傾く(rotation.z は負が右)。直す前はここの符号が逆だった
     this.camera.rotation.z -= g.bank * C.roll;
     this.renderer.render(this.scene, this.camera);

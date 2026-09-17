@@ -2,7 +2,7 @@
 // 感想を推測で直さないための装置。npm run dev を先に起動しておくこと。
 import puppeteer from 'puppeteer';
 
-const URL = 'http://localhost:8141/?harness&seed=17';
+const URL = (process.env.GLIDE_BASE || 'http://localhost:8141/') + '?harness&seed=17';
 const b = await puppeteer.launch({
   headless: true, protocolTimeout: 240000,
   args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],

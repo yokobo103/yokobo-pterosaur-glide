@@ -8,7 +8,7 @@ const imgs = [];
 for (const [k, name] of KEYS) {
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 844 });
-  await p.goto(`http://localhost:8141/?harness&seed=17&cam=${k}`, { waitUntil: 'networkidle0' });
+  await p.goto(`${process.env.GLIDE_BASE || 'http://localhost:8141/'}?harness&seed=17&cam=${k}`, { waitUntil: 'networkidle0' });
   await p.waitForFunction(() => !!window.__slice);
   await p.evaluate(() => { const s=window.__slice; s.auto(false); s.reset(); s.begin(); for(let i=0;i<150;i++) s.step(1/60,true); });
   const a = await p.screenshot({ encoding: 'base64' });

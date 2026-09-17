@@ -12,7 +12,7 @@ import puppeteer from 'puppeteer';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'screenshots');
-const URL = 'http://localhost:8141/';
+const URL = (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
 

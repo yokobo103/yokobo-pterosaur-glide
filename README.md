@@ -21,6 +21,7 @@ npm run dev     # http://localhost:8141
 - 押している間だけ曲がる。速度は自動（傾けると勝手に減速する）
 - 上がる空気の場所は**舞い上がる土ぼこりの柱**で分かる。数字も矢印も出さない
 - ところどころに**越えられない高い山**がある。回り込む
+- 翼竜は本物のモデル（RH02）。`?size=1|2|3` で見せる大きさを比べられる（既定は2＝翼開長10m）
 - 既定は丘のある世界。`?world=flat` で起伏なし、`?world=ridge` で尾根の風の試作
 - 右の帯と音が上昇率。芯に近いほど高く速く鳴る
 - 日が傾くと空気は上がらなくなる。降りたところが記録
@@ -68,6 +69,8 @@ tools/sheet.mjs   撮った絵を1枚に並べる
 ## 検査
 
 ```
+npm run build && node tools/run-checks.mjs   # 全部の検査を1回で(開発サーバー不要)
+node tools/run-checks.mjs --public           # 公開版
 npm run dev              # 別で起動しておく
 node tools/capture.mjs --touch      # 手元
 node tools/verify-public.mjs        # 公開URLが本当に飛べるか

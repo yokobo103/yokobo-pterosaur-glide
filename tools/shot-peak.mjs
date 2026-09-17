@@ -1,6 +1,6 @@
 // 高い山に向かって飛んでいる場面を撮る
 import puppeteer from 'puppeteer';
-const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : 'http://localhost:8141/';
+const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 300000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const p = await b.newPage();

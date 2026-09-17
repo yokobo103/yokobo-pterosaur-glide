@@ -1,6 +1,6 @@
 import { Terrain, ThermalField, TUNE, WORLDS } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
-import { View, CAMS } from './scene.js';
+import { View, CAMS, SIZES } from './scene.js';
 import { Vario } from './audio.js';
 
 const q = new URLSearchParams(location.search);
@@ -33,7 +33,9 @@ if (WORLD === 'ridge') {
 }
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
-const view = new View(el('app'), terrain, field, camOf(CAM_KEY));
+const SIZE_KEY = SIZES[q.get('size')] ? q.get('size') : '2';   // 見せる大きさの候補(?size=1|2|3)
+const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZES[SIZE_KEY]);
+if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 
 // スタート画面のカメラ選択。選んだものは次回も使う
 const camButtons = [...document.querySelectorAll('#cams button')];
@@ -138,6 +140,9 @@ window.__slice = {
   seed: SEED,
   world: WORLD,
   camKey: () => CAM_KEY,
+  sizeKey: SIZE_KEY,
+  modelReady: () => view.modelReady,
+  bone: name => view.boneInfo(name),
   camRoll: () => view.cam.roll,
   begin() { ui.start.classList.add('hidden'); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },

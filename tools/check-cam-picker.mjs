@@ -1,6 +1,6 @@
 // スタート画面のカメラ選択を、スマホの本物のタッチで確かめる。
 import puppeteer from 'puppeteer';
-const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : 'http://localhost:8141/';
+const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const p = await b.newPage();

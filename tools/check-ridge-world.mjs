@@ -1,6 +1,6 @@
 // 山脈の世界: 向きの検査・スタート地点・画面の絵
 import puppeteer from 'puppeteer';
-const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : 'http://localhost:8141/';
+const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 300000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const ok = c => c ? 'PASS' : 'FAIL';

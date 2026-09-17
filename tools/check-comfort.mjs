@@ -1,7 +1,7 @@
 // 酔いにつながりやすい動きを、カメラの型ごとに測る。
 // 右5秒 → 直進3秒 → 左5秒 → 直進3秒 を毎コマ描画しながら流す。
 import puppeteer from 'puppeteer';
-const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : 'http://localhost:8141/';
+const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yokobo-pterosaur-glide/' : (process.env.GLIDE_BASE || 'http://localhost:8141/');
 const KEYS = ['old', 'a', 'b', 'c'];
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 300000,
   args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });

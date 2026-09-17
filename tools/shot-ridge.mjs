@@ -5,7 +5,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 300000,
 for (const cam of ['a', 'c']) {
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 844 });
-  await p.goto(`http://localhost:8141/?harness&seed=17&cam=${cam}&world=ridge`, { waitUntil: 'networkidle0' });
+  await p.goto(`${process.env.GLIDE_BASE || 'http://localhost:8141/'}?harness&seed=17&cam=${cam}&world=ridge`, { waitUntil: 'networkidle0' });
   await p.waitForFunction(() => !!window.__slice);
   const info = await p.evaluate(() => {
     const s = window.__slice; s.auto(false); s.reset(); s.begin();

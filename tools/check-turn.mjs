@@ -3,7 +3,7 @@
 import puppeteer from 'puppeteer';
 
 const LOCAL = process.argv.includes('--local');
-const BASE = LOCAL ? 'http://localhost:8141/' : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
+const BASE = LOCAL ? (process.env.GLIDE_BASE || 'http://localhost:8141/') : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
 console.log('測る対象:', BASE);
 
 const b = await puppeteer.launch({
