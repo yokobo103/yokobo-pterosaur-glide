@@ -1,4 +1,4 @@
-import { Terrain, ThermalField, TUNE, WORLDS } from './world.js';
+import { Terrain, ThermalField, TUNE, WORLDS, HERD } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
 import { View, CAMS, SIZES } from './scene.js';
 import { Vario } from './audio.js';
@@ -38,6 +38,7 @@ const camk = Number(q.get('camk'));                              // 調整用: ?
 const SIZE = q.has('camk') && camk > 0 ? { ...SIZES[SIZE_KEY], cam: camk } : SIZES[SIZE_KEY];
 const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
+if (!q.has('nodinos')) view.stegos.load(import.meta.env.BASE_URL + 'models/stego.glb').catch(e => console.error('ステゴサウルスの読み込みに失敗', e));   // ?nodinos で無し
 if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL, view.renderer).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
 // スタート画面のカメラ選択。選んだものは次回も使う
@@ -151,6 +152,17 @@ window.__slice = {
   sizeKey: SIZE_KEY,
   modelReady: () => view.modelReady,
   forestReady: () => view.forest.ready,
+  stegoReady: () => view.stegos.ready,
+  herdTune: o => Object.assign(HERD, o),
+  // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
+  stegos: () => view.stegos.pool.filter(p => p.animal).map(p => {
+    const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };
+    const a = p.animal;
+    return { id: a.id, state: a.state, x: a.x, y: a.y, head: a.head, ground: terrain.height(a.x, a.y),
+             headBone: w('Head'), tailBone: w('Tail04'), feet: ['ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'].map(w),
+             dist: Math.hypot(a.x - glider.x, a.y - glider.y) };
+  }),
+  herdsNear: (x, y, r) => [...view.stegos.herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
   trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),

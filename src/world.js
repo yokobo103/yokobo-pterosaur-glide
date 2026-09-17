@@ -296,3 +296,100 @@ export class Vegetation {
     return out;
   }
 }
+
+// ---------- ステゴサウルスの群れ ----------
+// 見た目のためだけの生き物で、飛び方には影響しない。群れの場所は区画ごとに種つきで決まる。
+export const HERD = {
+  cell: 3000,         // 区画の大きさ [m]
+  chance: 0.9,        // 区画に群れがいる確率
+  min: 3, max: 6,     // 群れの頭数
+  spread: 45,         // 群れの広がり [m]
+  walk: 0.21,         // 歩きの動き1回ぶんの前進の速さ [m/s](AstraのWalkクリップの値)
+  timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
+  active: 1800,       // この距離の群れだけ動かす [m]
+  show: 1300,         // この距離の個体だけ描く [m]
+};
+
+export class Herds {
+  constructor(terrain) { this.t = terrain; this.cells = new Map(); }
+  herdIn(ci, cj) {
+    const key = ci + ',' + cj;
+    if (this.cells.has(key)) return this.cells.get(key);
+    const t = this.t, S = HERD.cell;
+    const r = rng(Math.imul(t.seed, 22695477) ^ Math.imul(ci, 1664525) ^ Math.imul(cj, 1013904223));
+    let herd = null;
+    if (r() < HERD.chance) {
+      // 川の近くで、水際から離れた平らな所を探す
+      for (let k = 0; k < 40 && !herd; k++) {
+        const y = (cj + r()) * S;
+        const side = r() < 0.5 ? -1 : 1;
+        const x = t.riverX(y) + side * (140 + 1400 * r());   // 開けた所を見つけやすいよう、川から1.5kmまで探す
+        if (Math.floor(x / S) !== ci) continue;
+        const h = t.height(x, y);
+        if (h < t.water + 1.5 || t.slope(x, y, 25) > 0.12) continue;
+        if (t.grove(x, y) > 0.42) continue;                         // 林の中だと木に隠れて見えなかった。開けた所に置く
+        const n = HERD.min + Math.floor(r() * (HERD.max - HERD.min + 1));
+        const animals = [];
+        for (let i = 0; i < n; i++) {
+          const ax = x + (r() * 2 - 1) * HERD.spread, ay = y + (r() * 2 - 1) * HERD.spread;
+          animals.push({ id: key + ':' + i, x: ax, y: ay, head: r() * Math.PI * 2, state: 'idle',
+                         timer: 1 + r() * 8, tx: ax, ty: ay, s: 0.9 + 0.2 * r(), r: rng(Math.imul(ci + 7, 31) + cj * 977 + i) });
+        }
+        herd = { key, cx: x, cy: y, animals };
+      }
+    }
+    this.cells.set(key, herd);
+    return herd;
+  }
+  *herdsNear(px, py, rad) {
+    const S = HERD.cell, n = Math.ceil(rad / S) + 1, ci0 = Math.floor(px / S), cj0 = Math.floor(py / S);
+    for (let i = ci0 - n; i <= ci0 + n; i++) for (let j = cj0 - n; j <= cj0 + n; j++) {
+      const h = this.herdIn(i, j);
+      if (h && Math.hypot(h.cx - px, h.cy - py) <= rad + 2 * HERD.spread) yield h;
+    }
+  }
+  update(px, py, dt) {
+    const t = this.t, v = HERD.walk * HERD.timeScale;
+    for (const herd of this.herdsNear(px, py, HERD.active)) {
+      for (const a of herd.animals) {
+        a.timer -= dt;
+        if (a.timer <= 0) {
+          if (a.state === 'idle') {
+            // ほぼ正面の少し先へ歩き出す。群れから離れすぎていたら中心の方へ曲がる。
+            // 群れの中の適当な一点を目指すと歩く間の9割で向きを変え続け、そのあいだ足が地面を横に滑った
+            const toC = Math.atan2(herd.cx - a.x, herd.cy - a.y);
+            let back = toC - a.head;
+            while (back > Math.PI) back -= 2 * Math.PI;
+            while (back < -Math.PI) back += 2 * Math.PI;
+            const far = Math.hypot(herd.cx - a.x, herd.cy - a.y) > HERD.spread;
+            const dir = a.head + (far ? Math.max(-0.7, Math.min(0.7, back)) : (a.r() * 2 - 1) * 0.3);
+            const len = 10 + a.r() * 16;
+            a.state = 'walk'; a.timer = 6 + a.r() * 14;
+            a.tx = a.x + Math.sin(dir) * len; a.ty = a.y + Math.cos(dir) * len;
+          } else { a.state = 'idle'; a.timer = 4 + a.r() * 10; }
+        }
+        if (a.state !== 'walk') continue;
+        const want = Math.atan2(a.tx - a.x, a.ty - a.y);
+        let e = want - a.head;
+        while (e > Math.PI) e -= 2 * Math.PI;
+        while (e < -Math.PI) e += 2 * Math.PI;
+        a.head += Math.max(-0.1 * dt, Math.min(0.1 * dt, e));        // ゆっくり向きを変える(速いと足が横に滑る)
+        const nx = a.x + Math.sin(a.head) * v * dt, ny = a.y + Math.cos(a.head) * v * dt;
+        const h = t.height(nx, ny);
+        if (h < t.water + 1.2 || t.slope(nx, ny, 10) > 0.25 || Math.hypot(a.tx - a.x, a.ty - a.y) < 3) {
+          a.state = 'idle'; a.timer = 3 + a.r() * 6;                   // 水際・急斜面・目的地で立ち止まる
+          continue;
+        }
+        a.x = nx; a.y = ny;
+      }
+    }
+  }
+  near(px, py, rad) {
+    const out = [];
+    for (const herd of this.herdsNear(px, py, rad)) for (const a of herd.animals) {
+      const d = Math.hypot(a.x - px, a.y - py);
+      if (d <= rad) out.push({ a, d });
+    }
+    return out.sort((p, q) => p.d - q.d);
+  }
+}

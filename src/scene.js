@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { TUNE, VEG, Vegetation } from './world.js';
+import { TUNE, VEG, Vegetation, HERD, Herds } from './world.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
@@ -433,6 +434,61 @@ class Forest {
   }
 }
 
+// ステゴサウルス(Astraのリグ版を tools/export-stego.py で書き出したもの)。近い個体だけ骨つきで描く
+class Stegos {
+  constructor(terrain, scene) {
+    this.t = terrain; this.scene = scene; this.herds = new Herds(terrain);
+    this.proto = null; this.clips = null; this.pool = []; this.byId = new Map(); this.ready = false;
+  }
+  async load(url) {
+    const gltf = await new GLTFLoader().loadAsync(url);
+    this.proto = gltf.scene;
+    this.proto.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
+    this.clips = Object.fromEntries(gltf.animations.map(c => [c.name, c]));
+    this.ready = true;
+  }
+  make() {
+    const group = new THREE.Group();
+    const model = cloneSkinned(this.proto);
+    model.rotation.y = Math.PI / 2;           // 書き出したモデルは頭が -X。群れの向き(+Z)へ回す
+    group.add(model);
+    const mixer = new THREE.AnimationMixer(model);
+    const idle = mixer.clipAction(this.clips.Idle), walk = mixer.clipAction(this.clips.Walk);
+    walk.timeScale = HERD.timeScale;
+    idle.play();
+    this.scene.add(group);
+    return { group, model, mixer, idle, walk, animal: null, state: 'idle' };
+  }
+  update(px, py, dt) {
+    if (!this.ready) return;
+    this.herds.update(px, py, dt);
+    const list = this.herds.near(px, py, HERD.show).slice(0, 18);
+    const keep = new Set(list.map(e => e.a.id));
+    // 見えなくなった個体の器を空ける
+    for (const e of this.pool) if (e.animal && !keep.has(e.animal.id)) { this.byId.delete(e.animal.id); e.animal = null; e.group.visible = false; }
+    for (const { a } of list) {
+      let e = this.byId.get(a.id);
+      if (!e) {
+        e = this.pool.find(p => !p.animal) || (this.pool.push(this.make()), this.pool[this.pool.length - 1]);
+        e.animal = a; this.byId.set(a.id, e);
+        e.state = null;                         // 状態を合わせ直す
+      }
+      e.group.visible = true;
+      e.group.position.set(SX * a.x, this.t.height(a.x, a.y), a.y);
+      e.group.rotation.set(0, -a.head, 0);
+      e.group.scale.setScalar(a.s);
+      if (e.state !== a.state) {
+        const to = a.state === 'walk' ? e.walk : e.idle, from = a.state === 'walk' ? e.idle : e.walk;
+        if (e.state === null) { from.stop(); to.reset().play(); }
+        else { to.reset().play(); from.crossFadeTo(to, 0.4, false); }
+        e.state = a.state;
+      }
+      e.mixer.update(dt);
+    }
+  }
+  count() { return this.pool.filter(p => p.animal).length; }
+}
+
 function makeGlider() {
   // 灰色の箱。どの角度から見ても向きが分かる形にする。
   // 厚みゼロの板だと、カメラの仰角が浅いとき消えて「鼻がこちらを向いた」ように見える。
@@ -502,6 +558,7 @@ export class View {
     this.scene.add(this.glider);
     this.mixer = null; this.model = null; this.modelReady = false;
     this.forest = new Forest(terrain, this.scene);
+    this.stegos = new Stegos(terrain, this.scene);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points);
     this.fog = new THREE.FogExp2(0xc9cfc4, 0.00009);   // 暖かく湿った霞
@@ -602,6 +659,7 @@ export class View {
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
+    this.stegos.update(g.x, g.y, dt);
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     // ---- 着地 ----
