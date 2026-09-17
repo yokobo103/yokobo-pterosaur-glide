@@ -50,14 +50,17 @@ class Ground {
     this.mesh.frustumCulled = false;
     this.snap = null;
   }
-  update(px, py) {
+  update(px, py, herds = []) {
     const cx = Math.round(px / this.cell) * this.cell, cy = Math.round(py / this.cell) * this.cell;
-    if (this.snap && this.snap[0] === cx && this.snap[1] === cy) return false;
+    const herdKey = herds.map(h => Math.round(h.cx) + ',' + Math.round(h.cy)).join('|');
+    if (this.snap && this.snap[0] === cx && this.snap[1] === cy && this.herdKey === herdKey) return false;
+    this.herdKey = herdKey;
     this.snap = [cx, cy];
     const t = this.t, half = this.size / 2, s = this.seg, hole = this.inner / 2;
     // ジュラ紀には草原がない。乾いた所は赤茶の土、湿った所はシダの緑、水辺は泥(黄土色の「草原」に見えていた)
     const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x4f7d38), sand = new THREE.Color(0x7a6448);
     const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
+    const trampled = new THREE.Color(0x6d5238);
     const c = new THREE.Color();
     for (let j = 0; j <= s; j++) for (let i = 0; i <= s; i++) {
       const k = (j * (s + 1) + i) * 3;
@@ -75,6 +78,12 @@ class Ground {
       if (gv > 0.47 && z > t.water + 2) {
         const k = Math.min(1, (gv - 0.47) / 0.08) * 0.7;
         c.lerp(m < 0.5 ? canopyDry : canopyWet, k);
+      }
+      // 群れがいる所は踏み荒らされた土。上空から「あそこに何かいる」と分かる目印
+      // (土ぼこりで示したら上昇気流の柱と見分けがつかなかった)
+      for (const hd of herds) {
+        const dh = Math.hypot(x - hd.cx, y - hd.cy);
+        if (dh < 95) { c.lerp(trampled, 0.75 * (1 - dh / 95) ** 0.6); break; }
       }
       const grain = 0.92 + 0.18 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)。暗く沈めすぎない
       c.multiplyScalar(grain);
@@ -439,6 +448,7 @@ class Stegos {
   constructor(terrain, scene) {
     this.t = terrain; this.scene = scene; this.herds = new Herds(terrain);
     this.proto = null; this.clips = null; this.pool = []; this.byId = new Map(); this.ready = false;
+
   }
   async load(url) {
     const gltf = await new GLTFLoader().loadAsync(url);
@@ -460,8 +470,8 @@ class Stegos {
     return { group, model, mixer, idle, walk, animal: null, state: 'idle' };
   }
   update(px, py, dt) {
-    if (!this.ready) return;
     this.herds.update(px, py, dt);
+    if (!this.ready) return;                       // 土ぼこりはモデルの読み込み前から出す
     const list = this.herds.near(px, py, HERD.show).slice(0, 18);
     const keep = new Set(list.map(e => e.a.id));
     // 見えなくなった個体の器を空ける
@@ -476,7 +486,7 @@ class Stegos {
       e.group.visible = true;
       e.group.position.set(SX * a.x, this.t.height(a.x, a.y), a.y);
       e.group.rotation.set(0, -a.head, 0);
-      e.group.scale.setScalar(a.s);
+      e.group.scale.setScalar(a.s * HERD.scale);
       if (e.state !== a.state) {
         const to = a.state === 'walk' ? e.walk : e.idle, from = a.state === 'walk' ? e.idle : e.walk;
         if (e.state === null) { from.stop(); to.reset().play(); }
@@ -654,8 +664,9 @@ export class View {
     return [(q.x + 1) / 2 * s.x, (1 - (q.y + 1) / 2) * s.y];
   }
   update(g, dt, sun) {
-    this.far.update(g.x, g.y);
-    this.near.update(g.x, g.y);
+    const herdCenters = this.stegos ? [...this.stegos.herds.herdsNear(g.x, g.y, 9000)] : [];
+    this.far.update(g.x, g.y, herdCenters);
+    this.near.update(g.x, g.y, herdCenters);
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);

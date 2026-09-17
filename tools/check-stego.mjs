@@ -51,8 +51,9 @@ const med = v => { const q = [...v].sort((x, y) => x - y); return q[Math.floor(q
 console.log(`  歩いている記録 ${walkingFrames}コマ / 接地中の足の記録 まっすぐ${contact.length} 向きを変えながら${contactTurn.length}`);
 console.log(`  向きを変えながら歩くときの接地中の足の速さ 中央値 ${contactTurn.length ? med(contactTurn).toFixed(2) : '-'} m/s`);
 check(`頭が進む向きを向いている(向きの一致 ${dots.length ? med(dots).toFixed(2) : '-'}、1が完全一致)`, dots.length > 0 && med(dots) > 0.9);
-check(`まっすぐ歩くとき、接地中の足が地面を滑らない(足の速さの中央値 ${contact.length ? med(contact).toFixed(2) : '-'} m/s / 歩く速さ ${((process.env.STEGO_WALK ? Number(process.env.STEGO_WALK) : 0.21) * 3).toFixed(2)} m/s)`, contact.length > 0 && med(contact) < 0.2);
-check(`足が地面に着いている(一番低い足と地面の差 中央値 ${med(ground).toFixed(2)}m)`, Math.abs(med(ground)) < 0.35);
+check(`まっすぐ歩くとき、接地中の足が地面を滑らない(足の速さの中央値 ${contact.length ? med(contact).toFixed(2) : '-'} m/s / 歩く速さ ${((process.env.STEGO_WALK ? Number(process.env.STEGO_WALK) : 0.21) * 3 * (await p.evaluate(() => window.__slice.herdScale()))).toFixed(2)} m/s)`, contact.length > 0 && med(contact) < 0.2 * (await p.evaluate(() => window.__slice.herdScale())));
+const scale = await p.evaluate(() => window.__slice.herdScale());
+check(`足が地面に着いている(一番低い足と地面の差 中央値 ${med(ground).toFixed(2)}m / 大きさ${scale}倍)`, Math.abs(med(ground)) < 0.35 * scale);
 check('エラーなし', errs.length === 0); if (errs.length) console.log(errs.slice(0, 3));
 // 絵: 低空で近く / 少し上から群れ全体
 // 群れの個体の平均位置に向かって撮る

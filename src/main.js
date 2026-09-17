@@ -154,6 +154,7 @@ window.__slice = {
   forestReady: () => view.forest.ready,
   stegoReady: () => view.stegos.ready,
   herdTune: o => Object.assign(HERD, o),
+  herdScale: () => HERD.scale,
   // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
   stegos: () => view.stegos.pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };

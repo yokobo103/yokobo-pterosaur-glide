@@ -302,8 +302,9 @@ export class Vegetation {
 export const HERD = {
   cell: 3000,         // 区画の大きさ [m]
   chance: 0.9,        // 区画に群れがいる確率
-  min: 3, max: 6,     // 群れの頭数
-  spread: 45,         // 群れの広がり [m]
+  min: 5, max: 10,    // 群れの頭数(小さい群れは上空から見つけられなかった)
+  spread: 80,         // 群れの広がり [m]
+  scale: 2.5,         // 見せる大きさ(全長7m -> 17.5m)。実寸だと飛行高度から数ピクセルで見えなかった
   walk: 0.21,         // 歩きの動き1回ぶんの前進の速さ [m/s](AstraのWalkクリップの値)
   timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
   active: 1800,       // この距離の群れだけ動かす [m]
@@ -349,7 +350,9 @@ export class Herds {
     }
   }
   update(px, py, dt) {
-    const t = this.t, v = HERD.walk * HERD.timeScale;
+    const t = this.t;
+    // 大きくすると歩幅も伸びるので、歩く速さも同じ倍率にしないと足が地面を滑る
+    const vOf = a => HERD.walk * HERD.timeScale * HERD.scale * a.s;
     for (const herd of this.herdsNear(px, py, HERD.active)) {
       for (const a of herd.animals) {
         a.timer -= dt;
@@ -374,6 +377,7 @@ export class Herds {
         while (e > Math.PI) e -= 2 * Math.PI;
         while (e < -Math.PI) e += 2 * Math.PI;
         a.head += Math.max(-0.1 * dt, Math.min(0.1 * dt, e));        // ゆっくり向きを変える(速いと足が横に滑る)
+        const v = vOf(a);
         const nx = a.x + Math.sin(a.head) * v * dt, ny = a.y + Math.cos(a.head) * v * dt;
         const h = t.height(nx, ny);
         if (h < t.water + 1.2 || t.slope(nx, ny, 10) > 0.25 || Math.hypot(a.tx - a.x, a.ty - a.y) < 3) {
