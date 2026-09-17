@@ -33,11 +33,12 @@ if (WORLD === 'ridge') {
 }
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
-const SIZE_KEY = SIZES[q.get('size')] ? q.get('size') : '2';   // 見せる大きさの候補(?size=1|2|3)
+const SIZE_KEY = SIZES[q.get('size')] ? q.get('size') : '1';   // 既定は実寸・カメラ後ろ5m(所長 2026-09-17)。?size=2|3 は比較用に残す
 const camk = Number(q.get('camk'));                              // 調整用: ?camk=0.05 でカメラの距離の倍率だけ上書き
 const SIZE = q.has('camk') && camk > 0 ? { ...SIZES[SIZE_KEY], cam: camk } : SIZES[SIZE_KEY];
 const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
+if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
 // スタート画面のカメラ選択。選んだものは次回も使う
 const camButtons = [...document.querySelectorAll('#cams button')];
@@ -144,7 +145,11 @@ window.__slice = {
   camKey: () => CAM_KEY,
   sizeKey: SIZE_KEY,
   modelReady: () => view.modelReady,
+  forestReady: () => view.forest.ready,
+  vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
+  forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),
   bone: name => view.boneInfo(name),
+  volcanoes: rad => terrain.volcanoesNear(glider.x, glider.y, rad || 20000).map(v => ({ x: v.x, y: v.y, H: Math.round(v.H), top: Math.round(terrain.height(v.x, v.y)) })),
   camRoll: () => view.cam.roll,
   begin() { ui.start.classList.add('hidden'); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },

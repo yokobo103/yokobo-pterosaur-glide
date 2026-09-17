@@ -46,10 +46,21 @@ export class Terrain {
       const x = (ci + 0.2 + 0.6 * r()) * S, y = (cj + 0.2 + 0.6 * r()) * S;
       if (!(Math.abs(x) < 2500 && y > -2500 && y < 3500)) {
         pk = { x, y, H: TUNE.peakMin + (TUNE.peakMax - TUNE.peakMin) * r(), R: 900 + 700 * r(), s: Math.floor(r() * 1000) };
+        pk.volcano = r() < 0.4;                       // 一部は火山(頂にくぼみ・噴煙)。乱数の最後で引くので山の位置と形は変わらない
       }
     }
     this.peakCells.set(key, pk);
     return pk;
+  }
+  // 近くの火山(噴煙を出す位置)
+  volcanoesNear(x, y, rad) {
+    if (!TUNE.peakChance) return [];
+    const S = TUNE.peakCell, n = Math.ceil(rad / S) + 1, ci = Math.floor(x / S), cj = Math.floor(y / S), out = [];
+    for (let i = ci - n; i <= ci + n; i++) for (let j = cj - n; j <= cj + n; j++) {
+      const p = this.peakIn(i, j);
+      if (p && p.volcano && Math.hypot(p.x - x, p.y - y) <= rad) out.push(p);
+    }
+    return out;
   }
   peaks(x, y) {
     if (!TUNE.peakChance) return 0;
@@ -62,7 +73,9 @@ export class Terrain {
       if (q > 4) continue;
       // なだらかな裾＋少しごつごつさせた頂
       const rough = 0.8 + 0.35 * ridged((x - p.x) / 700, (y - p.y) / 700, this.seed + p.s, 3);
-      h = Math.max(h, p.H * Math.exp(-q * 1.6) * rough);
+      let v = p.H * Math.exp(-q * 1.6) * rough;
+      if (p.volcano) v -= p.H * 0.14 * Math.exp(-q / 0.012);   // 火口のくぼみ
+      h = Math.max(h, v);
     }
     return h;
   }
@@ -110,6 +123,8 @@ export class Terrain {
   }
   // 地表の細かい濃淡。動いていることが分かるための模様で、飛行には影響しない
   grain(x, y) { return fbm(x / 230, y / 230, this.seed + 907, 2); }
+  // 林のかたまり(0〜1)。木の配置と、上空から見える地面の色の両方で使う
+  grove(x, y) { return fbm(x / 1400, y / 1400, this.seed + 300, 3); }
   // 湿っているほど植生が濃く、地面が暖まらない = 上昇風が立たない
   moisture(x, y) {
     const d = Math.abs(x - this.riverX(y));
@@ -226,5 +241,58 @@ export class ThermalField {
       if (d <= maxd) out.push({ d, c });
     }
     return out.sort((a, b) => a.d - b.d);
+  }
+}
+
+// ---------- 木と岩の配置 ----------
+// 見た目の配置だけで、飛び方には影響しない。区画ごとに種つきで決めるので、何度来ても同じ場所に同じ木がある。
+export const VEG = {
+  cell: 400,          // 区画の大きさ [m]
+  grid: 12,           // 区画あたりの候補点(12×12、約33mおき)。67mおきでは林に見えず草原にまばらな木だった
+  radius: 2600,       // この距離まで置く [m]
+  near: 150,          // この距離までは細かいモデル(1本3〜4千三角形なので近くだけ。220mだとイチョウ63本で290k三角形)
+  scale: { conifer: 3.8, ginkgo: 3.4, rock: 5.5 },   // 原型は針葉樹7.8m/イチョウ5.7m/岩0.9m。上空から見えるよう実在の大木の高さへ
+};
+
+export class Vegetation {
+  constructor(terrain) { this.t = terrain; this.cells = new Map(); }
+  cellItems(ci, cj) {
+    const key = ci + ',' + cj;
+    let got = this.cells.get(key);
+    if (got) return got;
+    got = [];
+    const t = this.t, S = VEG.cell, G = VEG.grid;
+    const r = rng(Math.imul(t.seed, 1103515245) ^ Math.imul(ci, 2654435761) ^ Math.imul(cj, 40503));
+    for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) {
+      const x = (ci + (i + r()) / G) * S, y = (cj + (j + r()) / G) * S;
+      const roll = r(), s = 0.75 + 0.55 * r(), rot = r() * Math.PI * 2;
+      const grove = t.grove(x, y);
+      // 林の外で、たまの一本にも岩にもならない候補は、重い計算の前に捨てる
+      if (grove < 0.47 && roll > 0.03) continue;
+      const h = t.height(x, y);
+      if (h < t.water + 2) continue;
+      const slope = t.slope(x, y, 30), m = t.moisture(x, y);
+      let kind = null;
+      if (slope > 0.3 || h > 260) { if (roll < 0.03) kind = 'rock'; }      // 急斜面と高い山は岩
+      else if (grove > 0.52 && m < 0.55 && roll < 0.7) kind = 'conifer';  // 乾いた林は針葉樹
+      else if (grove > 0.47 && m >= 0.4 && roll < 0.5) kind = 'ginkgo';   // 湿り気のある林はイチョウ
+      else if (roll < 0.004) kind = m < 0.5 ? 'conifer' : 'ginkgo';        // 林の外にもたまに一本
+      if (kind) got.push({ kind, x, y, z: h, s, rot });
+    }
+    this.cells.set(key, got);
+    return got;
+  }
+  // 地点のまわりに置くものを、近い/遠いに分けて返す
+  around(px, py) {
+    const S = VEG.cell, n = Math.ceil(VEG.radius / S);
+    const ci0 = Math.floor(px / S), cj0 = Math.floor(py / S);
+    const out = [];
+    for (let i = ci0 - n; i <= ci0 + n; i++) for (let j = cj0 - n; j <= cj0 + n; j++) {
+      for (const it of this.cellItems(i, j)) {
+        const d = Math.hypot(it.x - px, it.y - py);
+        if (d <= VEG.radius) out.push({ ...it, near: d <= VEG.near });
+      }
+    }
+    return out;
   }
 }

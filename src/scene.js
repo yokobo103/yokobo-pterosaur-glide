@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { TUNE } from './world.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { TUNE, VEG, Vegetation } from './world.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
@@ -13,7 +14,7 @@ const SX = -1;
 // 翼竜の見せる大きさ。RH02は実寸で翼開長2.2m。飛び方の計算は変えず、見た目とカメラの距離だけ変える
 //   scale: モデルの拡大率 / cam: カメラの距離の倍率
 export const SIZES = {
-  1: { name: '実寸2.2m・カメラを寄せる', scale: 1.0, cam: 0.08 },   // 0.15(後ろ18m)は「もっと寄せて」
+  1: { name: '実寸2.2m・カメラを寄せる', scale: 1.0, cam: 0.042 },  // 所長が選んだ距離: 後ろ約5m(18m→10m→6m→5m)
   2: { name: '翼開長10m',               scale: 4.6, cam: 0.5 },
   3: { name: '翼開長22m(灰色の箱と同じ)', scale: 10,  cam: 1.0 },
 };
@@ -53,7 +54,9 @@ class Ground {
     if (this.snap && this.snap[0] === cx && this.snap[1] === cy) return false;
     this.snap = [cx, cy];
     const t = this.t, half = this.size / 2, s = this.seg, hole = this.inner / 2;
-    const dry = new THREE.Color(0xc4a76a), wet = new THREE.Color(0x35572c), sand = new THREE.Color(0xcbb98d);
+    // ジュラ紀には草原がない。乾いた所は赤茶の土、湿った所はシダの緑、水辺は泥(黄土色の「草原」に見えていた)
+    const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x4f7d38), sand = new THREE.Color(0x7a6448);
+    const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
     const c = new THREE.Color();
     for (let j = 0; j <= s; j++) for (let i = 0; i <= s; i++) {
       const k = (j * (s + 1) + i) * 3;
@@ -63,10 +66,18 @@ class Ground {
       if (hole && Math.abs(x - cx) < hole && Math.abs(y - cy) < hole) z = -9999;
       this.pos[k] = SX * x; this.pos[k + 1] = z; this.pos[k + 2] = y;
       const m = t.moisture(x, y);
-      c.copy(dry).lerp(wet, m);
-      const grain = 0.86 + 0.28 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)
+      // 湿り気は大半が中くらいで、そのまま混ぜるとオリーブ色になって何も変わらなかった。差を強調して振り分ける
+      const mm = Math.min(1, Math.max(0, (m - 0.3) / 0.3));
+      c.copy(dry).lerp(wet, mm * mm * (3 - 2 * mm));
+      // 林の下は樹冠の色。上空からは1本1本より、この色のかたまりで林と読める
+      const gv = t.grove(x, y);
+      if (gv > 0.47 && z > t.water + 2) {
+        const k = Math.min(1, (gv - 0.47) / 0.08) * 0.7;
+        c.lerp(m < 0.5 ? canopyDry : canopyWet, k);
+      }
+      const grain = 0.92 + 0.18 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)。暗く沈めすぎない
       c.multiplyScalar(grain);
-      if (z < t.water + 1.2) c.lerp(sand, 0.7);
+      if (z < t.water + 1.2) c.lerp(sand, 0.8);
       this.col[k] = c.r; this.col[k + 1] = c.g; this.col[k + 2] = c.b;
     }
     this.geo.attributes.position.needsUpdate = true;
@@ -164,6 +175,46 @@ class Dust {
   }
 }
 
+// 火山の噴煙。遠くからの目印。風下(+x)へ流れながら広がる
+class Plumes {
+  constructor(terrain, max = 1800) {
+    this.t = terrain; this.max = max; this.parts = [];
+    const g = new THREE.BufferGeometry();
+    this.pos = new Float32Array(max * 3); this.alpha = new Float32Array(max);
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    g.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1));
+    this.geo = g;
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { uSize: { value: 380.0 }, uMax: { value: 60.0 }, uColor: { value: new THREE.Color(0x9a948c) }, uFade: { value: 1 } },   // 暗く濃いと黒い塊のシールに見えた
+      vertexShader: DUST_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false,
+    });
+    this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false;
+  }
+  update(px, py, dt) {
+    const vs = this.t.volcanoesNear(px, py, 16000).slice(0, 6);
+    const per = Math.floor(this.max / Math.max(vs.length, 1));
+    let n = 0;
+    for (const v of vs) {
+      const top = this.t.height(v.x, v.y) + v.H * 0.02;
+      for (let i = 0; i < per && n < this.max; i++, n++) {
+        let p = this.parts[n];
+        if (!p || p.v !== v) p = this.parts[n] = { v, u: Math.random(), a: Math.random() * 6.28, r: Math.random() };
+        p.u += dt * 0.018;
+        if (p.u > 1) { p.u -= 1; p.a = Math.random() * 6.28; p.r = Math.random(); }
+        const spread = 30 + 420 * p.u * p.u;              // 根元は細い柱、上で広がる
+        const k = n * 3;
+        this.pos[k] = SX * (v.x + 1400 * p.u * p.u * p.u + Math.cos(p.a) * spread * p.r);
+        this.pos[k + 1] = top + 1300 * p.u;
+        this.pos[k + 2] = v.y + Math.sin(p.a) * spread * p.r;
+        this.alpha[n] = 0.28 * Math.min(1, p.u * 6) * (1 - p.u);
+      }
+    }
+    for (; n < this.max; n++) { this.alpha[n] = 0; this.pos[n * 3 + 1] = -9999; }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+  }
+}
+
 // 上昇気流の頭にできる雲。土ぼこりは近くでしか見えないので、遠距離の手がかりはこちら。
 class Clouds {
   constructor(field, max = 900) {
@@ -204,6 +255,126 @@ class Clouds {
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.aAlpha.needsUpdate = true;
     this.mat.uniforms.uFade.value = 0.3 + 0.7 * sun;
+  }
+}
+
+// 遠景用の木。原型と同じ大きさ(針葉樹 幅5.2×高さ7.8m / イチョウ 幅4.8×高さ5.7m)で、色は原型の材質の色
+function farTree(kind) {
+  const bark = new THREE.Color(0.16, 0.08, 0.03).multiplyScalar(1.35);
+  const parts = [];
+  const add = (geo, color, y) => {
+    const g = geo.toNonIndexed(); g.translate(0, y, 0);
+    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+    const n = g.attributes.position.count, col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { col[i * 3] = color.r; col[i * 3 + 1] = color.g; col[i * 3 + 2] = color.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    parts.push(g);
+  };
+  if (kind === 'conifer') {
+    add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 5, 1, true), bark, 0.8);   // 上下のふたは見えないので省く
+    add(new THREE.ConeGeometry(2.6, 6.4, 7), new THREE.Color(0.05, 0.18, 0.1).multiplyScalar(1.35), 1.4 + 3.2);
+  } else {
+    add(new THREE.CylinderGeometry(0.25, 0.35, 2.6, 5, 1, true), bark, 1.3);
+    const crown = new THREE.IcosahedronGeometry(2.4, 0); crown.scale(1, 0.85, 1);
+    add(crown, new THREE.Color(0.32, 0.45, 0.1).multiplyScalar(1.35), 3.6);
+  }
+  return mergeGeometries(parts, false);
+}
+
+// 木と岩。種類×近景/遠景ごとに1つの InstancedMesh(描画1回)にまとめる。
+// GLBの材質の色を頂点色に焼き込んで1つの形にしてから並べる
+class Forest {
+  constructor(terrain, scene) {
+    this.veg = new Vegetation(terrain);
+    this.scene = scene;
+    this.meshes = {};            // 'conifer_lod0' など
+    this.ready = false; this.last = null;
+    this.counts = {};
+  }
+  async load(baseUrl) {
+    const loader = new GLTFLoader();
+    const CAP = { lod0: 60, lod1: 12000 };
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    for (const kind of ['conifer', 'ginkgo', 'rock']) {
+      for (const lod of ['lod0', 'lod1']) {
+        if (kind === 'rock' && lod === 'lod1') continue;            // 岩は18三角形なので1種類で足りる
+        if (lod === 'lod1') {
+          // 遠景はGLBを減らした版ではなく単純な形。減らした版はイチョウの葉が消えて幹だけになった
+          const geo = farTree(kind);
+          const im = new THREE.InstancedMesh(geo, mat, CAP.lod1);
+          im.count = 0; im.frustumCulled = false;
+          im.userData.tris = geo.attributes.position.count / 3;
+          this.meshes[`${kind}_${lod}`] = im; this.scene.add(im);
+          continue;
+        }
+        const gltf = await loader.loadAsync(`${baseUrl}models/veg/${kind}_${lod}.glb`);
+        const parts = [];
+        gltf.scene.updateMatrixWorld(true);
+        gltf.scene.traverse(o => {
+          if (!o.isMesh) return;
+          const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+          for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+          const c = (o.material && o.material.color) ? o.material.color.clone().multiplyScalar(1.35) : new THREE.Color(0.3, 0.3, 0.3);
+          const n = g.attributes.position.count, col = new Float32Array(n * 3);
+          for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+          g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          parts.push(g.index ? g : g);
+        });
+        const geo = mergeGeometries(parts, false);
+        const cap = kind === 'rock' ? CAP.lod1 : CAP[lod];
+        const im = new THREE.InstancedMesh(geo, mat, cap);
+        im.count = 0; im.frustumCulled = false;
+        im.userData.tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
+        this.meshes[`${kind}_${lod}`] = im;
+        this.scene.add(im);
+      }
+    }
+    this.ready = true;
+  }
+  update(px, py) {
+    if (!this.ready || this.frozen) return;
+    // 150m動くごとに並べ直す(毎コマはやらない)
+    if (this.last && Math.hypot(px - this.last[0], py - this.last[1]) < 150) return;
+    this.last = [px, py];
+    const idx = {};
+    for (const k of Object.keys(this.meshes)) idx[k] = 0;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    for (const it of this.veg.around(px, py)) {
+      let key = it.kind === 'rock' ? 'rock_lod0' : `${it.kind}_${it.near ? 'lod0' : 'lod1'}`;
+      if (it.near && it.kind !== 'rock' && idx[key] >= this.meshes[key].instanceMatrix.count) key = `${it.kind}_lod1`;   // 近景が満杯なら遠景の形で
+      const im = this.meshes[key];
+      if (!im || idx[key] >= im.instanceMatrix.count) continue;
+      const s = VEG.scale[it.kind] * it.s;
+      q.setFromAxisAngle(up, it.rot);
+      p.set(SX * it.x, it.z - 0.4 * s, it.y);          // 斜面でも浮かないよう少し沈める
+      sc.set(s, s, s);
+      m.compose(p, q, sc);
+      im.setMatrixAt(idx[key]++, m);
+    }
+    for (const [k, im] of Object.entries(this.meshes)) {
+      im.count = idx[k];
+      im.instanceMatrix.needsUpdate = true;
+    }
+    this.counts = { ...idx };
+  }
+  // 検査用: 各種類を横一列に並べて、形を直接見る。並べたあとは自動の並べ直しを止める
+  lineup(px, py, pz, dist = 140) {
+    this.frozen = true;
+    const order = ['conifer_lod0', 'conifer_lod1', 'ginkgo_lod0', 'ginkgo_lod1', 'rock_lod0'];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (const im of Object.values(this.meshes)) im.count = 0;
+    order.forEach((key, i) => {
+      const im = this.meshes[key]; if (!im) return;
+      const kind = key.split('_')[0], s = VEG.scale[kind];
+      const x = px + (i - 2) * 45;
+      p.set(SX * x, pz, py + dist); sc.set(s, s, s); m.compose(p, q, sc);
+      im.setMatrixAt(0, m); im.count = 1; im.instanceMatrix.needsUpdate = true;
+    });
+  }
+  triangles() {
+    let t = 0;
+    for (const im of Object.values(this.meshes)) t += im.count * im.userData.tris;
+    return t;
   }
 }
 
@@ -248,7 +419,7 @@ export class View {
     el.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(cam.fov, 1, 0.5, 18000);
-    this.sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+    this.sunLight = new THREE.DirectionalLight(0xffe6c4, 1.5);
     this.sunLight.position.set(-0.4, 1, 0.5);
     this.scene.add(this.sunLight, new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, 1.0));
     this.far = new Ground(terrain, 13000, 110, { inner: 2600 });
@@ -274,7 +445,10 @@ export class View {
     this.glider.add(this.placeholder);
     this.scene.add(this.glider);
     this.mixer = null; this.model = null; this.modelReady = false;
-    this.fog = new THREE.FogExp2(0xbfd0e0, 0.000075);
+    this.forest = new Forest(terrain, this.scene);
+    this.plumes = new Plumes(terrain);
+    this.scene.add(this.plumes.points);
+    this.fog = new THREE.FogExp2(0xc9cfc4, 0.00009);   // 暖かく湿った霞
     this.scene.fog = this.fog;
     this.camHead = null;      // 機体の向きに遅れて追従する。旋回を「見える」ようにするため
     this.resize();
@@ -347,12 +521,14 @@ export class View {
     this.far.update(g.x, g.y);
     this.near.update(g.x, g.y);
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
+    this.forest.update(g.x, g.y);
+    this.plumes.update(g.x, g.y, dt);
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     this.glider.position.set(SX * g.x, g.z, g.y);
     this.glider.rotation.set(0, -g.head, g.bank, 'YXZ');
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
-    const day = new THREE.Color(0xbfd0e0), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
+    const day = new THREE.Color(0xc9cfc4), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
     const sky = sun > 0.35
       ? day.clone().lerp(dusk, (1 - sun) / 0.65)
       : dusk.clone().lerp(night, (0.35 - sun) / 0.35);
