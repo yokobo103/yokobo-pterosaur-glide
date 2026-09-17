@@ -34,7 +34,9 @@ if (WORLD === 'ridge') {
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
 const SIZE_KEY = SIZES[q.get('size')] ? q.get('size') : '2';   // 見せる大きさの候補(?size=1|2|3)
-const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZES[SIZE_KEY]);
+const camk = Number(q.get('camk'));                              // 調整用: ?camk=0.05 でカメラの距離の倍率だけ上書き
+const SIZE = q.has('camk') && camk > 0 ? { ...SIZES[SIZE_KEY], cam: camk } : SIZES[SIZE_KEY];
+const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 
 // スタート画面のカメラ選択。選んだものは次回も使う
