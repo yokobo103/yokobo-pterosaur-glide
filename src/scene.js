@@ -468,7 +468,8 @@ function makeGlider() {
 
 export class View {
   constructor(el, terrain, field, cam = CAMS.a, size = SIZES[2]) {
-    this.cam = cam; this.size = size;
+    this.cam = cam; this.size = size; this.terrain = terrain;
+    this.landing = null;          // 着地の演出中の状態
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     el.appendChild(this.renderer.domElement);
@@ -522,7 +523,30 @@ export class View {
       this.model = m;
       this.mixer = new THREE.AnimationMixer(m);
       this.clips = Object.fromEntries(gltf.animations.map(c => [c.name, c]));
-      if (this.clips.Glide_Loop) this.mixer.clipAction(this.clips.Glide_Loop).play();
+      this.act = {
+        glide: this.mixer.clipAction(this.clips.Glide_Loop),
+        land: this.mixer.clipAction(this.clips.Landing_Fold),
+        idle: this.mixer.clipAction(this.clips.Ground_Idle),
+      };
+      this.act.land.setLoop(THREE.LoopOnce, 1);
+      this.act.land.clampWhenFinished = true;
+      this.act.glide.play();
+      // 着地が終わったら地上待機へ
+      // 着地の動きはRootが前へ約2.4m進む。地上待機はRootが原点から始まるので、そのまま切り替えると後ろへ飛び戻って画面の下へ消えた
+      const rootTrack = this.clips.Landing_Fold.tracks.find(t => /^Root\.position$/.test(t.name));
+      this.rootTrackNames = this.clips.Landing_Fold.tracks.filter(t => /position/.test(t.name)).map(t => t.name).slice(0, 8);
+      this.landShift = 0;
+      if (rootTrack) {
+        const v = rootTrack.values, n = v.length;
+        this.landShift = Math.hypot(v[n - 3] - v[0], v[n - 1] - v[2]) * this.size.scale;
+      }
+      this.mixer.addEventListener('finished', e => {
+        if (e.action === this.act.land && this.landing) {
+          this.landing.shift = this.landShift;                // 進んだ分だけ機体の位置を前へ送ってから切り替える
+          this.act.land.stop();
+          this.act.idle.reset().play();
+        }
+      });
       this.modelReady = true;
     }, undefined, err => { console.error('翼竜の読み込みに失敗。灰色の箱のまま飛ぶ', err); });
   }
@@ -580,8 +604,33 @@ export class View {
     this.plumes.update(g.x, g.y, dt);
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
-    this.glider.position.set(SX * g.x, g.z, g.y);
-    this.glider.rotation.set(0, -g.head, g.bank, 'YXZ');
+    // ---- 着地 ----
+    // 地面に着いた瞬間は時速100km以上出ているので、その場で止めず2秒ほどで滑るように減速しながら着地の動きへ移る
+    let P = g;
+    if (!g.alive && this.model && this.act) {
+      if (!this.landing) {
+        this.landing = { t: 0, x: g.x, y: g.y, head: g.head, v: 32 };
+        this.act.land.reset().play();
+        this.act.glide.crossFadeTo(this.act.land, 0.35, false);
+      }
+      const L = this.landing, tau = 0.45;
+      L.t += dt;
+      const d = L.v * tau * (1 - Math.exp(-L.t / tau));
+      const lx = L.x + Math.sin(L.head) * d, ly = L.y + Math.cos(L.head) * d;
+      P = { x: lx, y: ly, z: this.terrain.height(lx, ly), head: L.head, bank: 0 };
+      this.glider.position.set(SX * P.x, P.z, P.y);
+      this.glider.rotation.set(0, -P.head, 0, 'YXZ');
+      this.model.position.y = 0;                              // 着地の動きは足元が原点。空中用の持ち上げを外す
+      this.model.position.z = L.shift || 0;                  // 地上待機に移ったら、着地で進んだ分だけ体だけを前へ(カメラは動かさない)
+    } else {
+      if (this.landing) {                                     // やり直したら空中の姿へ戻す
+        this.landing = null;
+        if (this.act) { this.act.land.stop(); this.act.idle.stop(); this.act.glide.reset().play(); }
+        if (this.model) { this.model.position.y = -0.35 * this.size.scale; this.model.position.z = 0; }
+      }
+      this.glider.position.set(SX * g.x, g.z, g.y);
+      this.glider.rotation.set(0, -g.head, g.bank, 'YXZ');
+    }
     // 夕暮れ。時計ではなく空の色で残り時間が分かる
     const day = new THREE.Color(0xc9cfc4), dusk = new THREE.Color(0xd98a5a), night = new THREE.Color(0x2b3348);
     const sky = sun > 0.35
@@ -613,8 +662,9 @@ export class View {
     while (e < -Math.PI) e += 2 * Math.PI;
     this.camHead += e * (1 - Math.exp(-dt / C.yawTau));
     const ch = this.camHead;
-    this.camera.position.set(SX * (g.x - Math.sin(ch) * C.back * k), g.z + C.up * k, g.y - Math.cos(ch) * C.back * k);
-    this.camera.lookAt(SX * (g.x + Math.sin(ch) * C.ahead), g.z + (C.look + 12 * tall) * k, g.y + Math.cos(ch) * C.ahead);
+    const camZ = P === g ? g.z : P.z + 2;
+    this.camera.position.set(SX * (P.x - Math.sin(ch) * C.back * k), camZ + C.up * k, P.y - Math.cos(ch) * C.back * k);
+    this.camera.lookAt(SX * (P.x + Math.sin(ch) * C.ahead), camZ + (C.look + 12 * tall) * k, P.y + Math.cos(ch) * C.ahead);
     // 右に傾いたらカメラも右に傾く(rotation.z は負が右)。直す前はここの符号が逆だった
     this.camera.rotation.z -= g.bank * C.roll;
     this.renderer.render(this.scene, this.camera);

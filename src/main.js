@@ -99,7 +99,9 @@ function finish() {
   ui.msgTitle.textContent = (glider.best / 1000).toFixed(2) + ' km';
   ui.msgSub.textContent = sunlight(glider.time) <= 0.02
     ? '日が暮れて、空気が上がらなくなった' : '降りた。もう一度: R キー / 画面を二回たたく';
-  ui.msg.classList.remove('hidden');
+  // 着地の動きを見せてから記録を出す(やり直しはすぐ効く)
+  const shownFor = glider;
+  setTimeout(() => { if (ended && glider === shownFor) ui.msg.classList.remove('hidden'); }, 2200);
 }
 
 function reset() {
@@ -190,6 +192,9 @@ window.__slice = {
   ridgeAt(x, y, z) { return field.ridgeAt(x, y, z, sunlight(glider.time)); },
   terrainHeight(x, y) { return terrain.height(x, y); },
   riverX(y) { return terrain.riverX(y); },
+  landing: () => view.landing && view.act ? { t: view.landing.t, shift: view.landShift, tracks: view.rootTrackNames, land: view.act.land.isRunning(), idle: view.act.idle.isRunning(), glide: view.act.glide.isRunning(),
+    groundY: terrain.height(view.landing.x, view.landing.y), bones: ['Head', 'HandL', 'HandR', 'FootL', 'FootR'].map(n => view.boneInfo(n)) } : null,
+  boneY: name => { const o = view.model && view.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new o.position.constructor()); return v.y; },
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),
