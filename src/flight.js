@@ -21,6 +21,7 @@ export class Glider {
   constructor(terrain, field, opts = {}) {
     this.t = terrain; this.f = field;
     this.x = opts.x || 0; this.y = opts.y || 0;
+    this.x0 = this.x; this.y0 = this.y;   // 距離は出発点からの直線距離で数える
     this.z = this.t.height(this.x, this.y) + (opts.alt ?? AIR.startAlt);
     this.head = 0; this.bank = 0; this.time = 0; this.inp = 0;
     this.vz = 0; this.lift = 0; this.alive = true; this.best = 0;
@@ -44,7 +45,8 @@ export class Glider {
     this.x += V * Math.sin(this.head) * dt;
     this.y += V * Math.cos(this.head) * dt;
     this.time += dt;
-    this.best = Math.max(this.best, this.y);
+    // 以前は北(+y)へ進んだ分だけ数えていて、東や南へ飛ぶと距離が増えなかった(所長「途中からカウントされなくなる」)
+    this.best = Math.max(this.best, Math.hypot(this.x - this.x0, this.y - this.y0));
     if (this.agl <= 2) { this.alive = false; this.z = this.t.height(this.x, this.y) + 2; }
   }
 }

@@ -290,7 +290,7 @@ export class Vegetation {
     for (let i = ci0 - n; i <= ci0 + n; i++) for (let j = cj0 - n; j <= cj0 + n; j++) {
       for (const it of this.cellItems(i, j)) {
         const d = Math.hypot(it.x - px, it.y - py);
-        if (d <= VEG.radius) out.push({ ...it, near: d <= VEG.near });
+        if (d <= VEG.radius) out.push({ ...it, d, near: d <= VEG.near });
       }
     }
     return out;

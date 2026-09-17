@@ -2,9 +2,10 @@
 import puppeteer from 'puppeteer';
 const LOCAL = !process.argv.includes('--public');
 const BASE = LOCAL ? (process.env.GLIDE_BASE || 'http://localhost:8141/') : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
-const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
-  args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 for (const size of [{n:'スマホ縦',w:390,h:844},{n:'PC横',w:1280,h:800}]) {
+  // 大きさごとに新しいブラウザで開く。同じブラウザで2ページ目を開くと、この検査環境では読み込みが止まった(実際の起動は0.6秒)
+  const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
+    args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
   const p = await b.newPage();
   await p.setViewport({ width: size.w, height: size.h });
   await p.goto(BASE + '?harness&seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
@@ -28,6 +29,5 @@ for (const size of [{n:'スマホ縦',w:390,h:844},{n:'PC横',w:1280,h:800}]) {
   console.log(`  自機の横位置 ${(r.minX/size.w*100).toFixed(0)}% 〜 ${(r.maxX/size.w*100).toFixed(0)}%`);
   console.log(`  自機の縦位置 ${(r.minY/size.h*100).toFixed(0)}% 〜 ${(r.maxY/size.h*100).toFixed(0)}%`);
   console.log(`  画面の外に出ていた時間 ${r.offPct.toFixed(1)}%  ${r.offPct<0.1?'PASS':'FAIL'}`);
-  await p.close();
+  await b.close();
 }
-await b.close();

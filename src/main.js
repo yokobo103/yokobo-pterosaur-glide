@@ -38,7 +38,7 @@ const camk = Number(q.get('camk'));                              // 調整用: ?
 const SIZE = q.has('camk') && camk > 0 ? { ...SIZES[SIZE_KEY], cam: camk } : SIZES[SIZE_KEY];
 const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
-if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
+if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL, view.renderer).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
 // スタート画面のカメラ選択。選んだものは次回も使う
 const camButtons = [...document.querySelectorAll('#cams button')];
@@ -69,6 +69,9 @@ cv.addEventListener('pointermove', e => { if (touch.has(e.pointerId)) touch.set(
 const drop = e => touch.delete(e.pointerId);
 cv.addEventListener('pointerup', drop);
 cv.addEventListener('pointercancel', drop);
+// 長押しでメニューや選択が出ないように
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('selectstart', e => e.preventDefault());
 
 function input(dt) {
   if (window.__slice && typeof window.__slice.forceInput === 'number') return window.__slice.forceInput;
@@ -146,6 +149,7 @@ window.__slice = {
   sizeKey: SIZE_KEY,
   modelReady: () => view.modelReady,
   forestReady: () => view.forest.ready,
+  trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),
   bone: name => view.boneInfo(name),

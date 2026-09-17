@@ -258,27 +258,81 @@ class Clouds {
   }
 }
 
-// 遠景用の木。原型と同じ大きさ(針葉樹 幅5.2×高さ7.8m / イチョウ 幅4.8×高さ5.7m)で、色は原型の材質の色
-function farTree(kind) {
-  const bark = new THREE.Color(0.16, 0.08, 0.03).multiplyScalar(1.35);
-  const parts = [];
-  const add = (geo, color, y) => {
-    const g = geo.toNonIndexed(); g.translate(0, y, 0);
-    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
-    const n = g.attributes.position.count, col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = color.r; col[i * 3 + 1] = color.g; col[i * 3 + 2] = color.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    parts.push(g);
+// ---- 木の近景と遠景の入れ替え ----
+// 遠景は、読み込んだAstraの木を横と上から撮った画像を板に貼ったもの(1本6三角形)。
+// 以前は円錐と多面体の代わりの形で、近づくと別物に切り替わって見えた(所長「変化が大きすぎて受け入れ難い」)。
+const FADE_NEAR = 90, FADE_FAR = 150;        // この距離の間で、近景と遠景を少しずつ入れ替える
+
+// 近景と遠景で同じ乱れ方を使い、足すとちょうど1本分になるように消す(穴も二重にもならない)
+function addDistanceFade(material, isFar) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uFadeA = { value: FADE_NEAR };
+    shader.uniforms.uFadeB = { value: FADE_FAR };
+    shader.vertexShader = shader.vertexShader
+      .replace('void main() {', 'varying float vFadeD;\nvoid main() {')
+      .replace('#include <project_vertex>', [
+        '#include <project_vertex>',
+        '  #ifdef USE_INSTANCING',
+        '    vFadeD = distance((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, cameraPosition);',
+        '  #else',
+        '    vFadeD = distance((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz, cameraPosition);',
+        '  #endif',
+      ].join('\n'));
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', 'uniform float uFadeA;\nuniform float uFadeB;\nvarying float vFadeD;\nvoid main() {')
+      .replace('#include <clipping_planes_fragment>', [
+        '#include <clipping_planes_fragment>',
+        '  {',
+        '    float fadeT = clamp((vFadeD - uFadeA) / (uFadeB - uFadeA), 0.0, 1.0);',
+        '    float fadeH = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453);',
+        isFar ? '    if (fadeH < 1.0 - fadeT) discard;' : '    if (fadeH > 1.0 - fadeT) discard;',
+        '  }',
+      ].join('\n'));
   };
-  if (kind === 'conifer') {
-    add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 5, 1, true), bark, 0.8);   // 上下のふたは見えないので省く
-    add(new THREE.ConeGeometry(2.6, 6.4, 7), new THREE.Color(0.05, 0.18, 0.1).multiplyScalar(1.35), 1.4 + 3.2);
-  } else {
-    add(new THREE.CylinderGeometry(0.25, 0.35, 2.6, 5, 1, true), bark, 1.3);
-    const crown = new THREE.IcosahedronGeometry(2.4, 0); crown.scale(1, 0.85, 1);
-    add(crown, new THREE.Color(0.32, 0.45, 0.1).multiplyScalar(1.35), 3.6);
-  }
-  return mergeGeometries(parts, false);
+  material.customProgramCacheKey = () => (isFar ? 'fade-far' : 'fade-near');
+}
+
+// Astraの木を撮って、遠景の板を作る。画像の左半分=横から、右下=上から
+function bakeImpostor(renderer, geo) {
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  const w = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z), h = bb.max.y - bb.min.y;
+  const rt = new THREE.WebGLRenderTarget(512, 512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+  const scene = new THREE.Scene();
+  // 色だけ撮る。光は板の側で当てる
+  scene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+  const side = new THREE.OrthographicCamera(-w / 2, w / 2, bb.max.y, bb.min.y, 0.1, 1000);
+  side.position.set(0, 0, 500); side.lookAt(0, 0, 0);
+  const top = new THREE.OrthographicCamera(-w / 2, w / 2, w / 2, -w / 2, 0.1, 2000);
+  top.position.set(0, 1000, 0); top.up.set(0, 0, -1); top.lookAt(0, 0, 0);
+  const prevTarget = renderer.getRenderTarget();
+  const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  renderer.setRenderTarget(rt);
+  // 透明な背景を黒にすると、遠くで画像を縮めたときに黒と混ざって暗くなった。背景は木自身の平均の色(透明)にする
+  const col = geo.attributes.color.array; const avg = new THREE.Color(0, 0, 0);
+  for (let i = 0; i < col.length; i += 3) { avg.r += col[i]; avg.g += col[i + 1]; avg.b += col[i + 2]; }
+  avg.multiplyScalar(3 / col.length);
+  renderer.setClearColor(avg, 0); renderer.clear();
+  rt.scissorTest = true;
+  rt.viewport.set(0, 0, 256, 512); rt.scissor.set(0, 0, 256, 512); renderer.setRenderTarget(rt); renderer.render(scene, side);
+  rt.viewport.set(256, 0, 256, 256); rt.scissor.set(256, 0, 256, 256); renderer.setRenderTarget(rt); renderer.render(scene, top);
+  rt.scissorTest = false; rt.viewport.set(0, 0, 512, 512); rt.scissor.set(0, 0, 512, 512);
+  renderer.setRenderTarget(prevTarget); renderer.setClearColor(prevColor, prevAlpha);
+  // 十字の縦板2枚＋樹冠の高さの水平板1枚。法線は上向きにそろえ、向きで明るさが変わらないようにする
+  const pos = [], uv = [], nrm = [];
+  const quad = (a, b, c, d, ua, ub, uc, ud) => {
+    for (const [p, u] of [[a, ua], [b, ub], [c, uc], [a, ua], [c, uc], [d, ud]]) { pos.push(...p); uv.push(...u); nrm.push(0, 1, 0); }
+  };
+  const y0 = bb.min.y, y1 = bb.max.y, r = w / 2;
+  quad([-r, y0, 0], [r, y0, 0], [r, y1, 0], [-r, y1, 0], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
+  quad([0, y0, -r], [0, y0, r], [0, y1, r], [0, y1, -r], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
+  const yc = y0 + (y1 - y0) * 0.62;
+  quad([-r, yc, r], [r, yc, r], [r, yc, -r], [-r, yc, -r], [0.5, 0], [1, 0], [1, 0.5], [0.5, 0.5]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return { geo: g, texture: rt.texture };
 }
 
 // 木と岩。種類×近景/遠景ごとに1つの InstancedMesh(描画1回)にまとめる。
@@ -291,65 +345,66 @@ class Forest {
     this.ready = false; this.last = null;
     this.counts = {};
   }
-  async load(baseUrl) {
+  async load(baseUrl, renderer) {
     const loader = new GLTFLoader();
-    const CAP = { lod0: 60, lod1: 12000 };
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const CAP = { lod0: 150, lod1: 12000 };
     for (const kind of ['conifer', 'ginkgo', 'rock']) {
-      for (const lod of ['lod0', 'lod1']) {
-        if (kind === 'rock' && lod === 'lod1') continue;            // 岩は18三角形なので1種類で足りる
-        if (lod === 'lod1') {
-          // 遠景はGLBを減らした版ではなく単純な形。減らした版はイチョウの葉が消えて幹だけになった
-          const geo = farTree(kind);
-          const im = new THREE.InstancedMesh(geo, mat, CAP.lod1);
-          im.count = 0; im.frustumCulled = false;
-          im.userData.tris = geo.attributes.position.count / 3;
-          this.meshes[`${kind}_${lod}`] = im; this.scene.add(im);
-          continue;
-        }
-        const gltf = await loader.loadAsync(`${baseUrl}models/veg/${kind}_${lod}.glb`);
-        const parts = [];
-        gltf.scene.updateMatrixWorld(true);
-        gltf.scene.traverse(o => {
-          if (!o.isMesh) return;
-          const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
-          for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
-          const c = (o.material && o.material.color) ? o.material.color.clone().multiplyScalar(1.35) : new THREE.Color(0.3, 0.3, 0.3);
-          const n = g.attributes.position.count, col = new Float32Array(n * 3);
-          for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
-          g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-          parts.push(g.index ? g : g);
-        });
-        const geo = mergeGeometries(parts, false);
-        const cap = kind === 'rock' ? CAP.lod1 : CAP[lod];
-        const im = new THREE.InstancedMesh(geo, mat, cap);
+      const gltf = await loader.loadAsync(baseUrl + 'models/veg/' + kind + '_lod0.glb');
+      const parts = [];
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse(o => {
+        if (!o.isMesh) return;
+        const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+        for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+        const c = (o.material && o.material.color) ? o.material.color.clone().multiplyScalar(1.35) : new THREE.Color(0.3, 0.3, 0.3);
+        const n = g.attributes.position.count, col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        parts.push(g);
+      });
+      const geo = mergeGeometries(parts, false);
+      const add = (key, g, mat, cap) => {
+        const im = new THREE.InstancedMesh(g, mat, cap);
         im.count = 0; im.frustumCulled = false;
-        im.userData.tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
-        this.meshes[`${kind}_${lod}`] = im;
-        this.scene.add(im);
+        im.userData.tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
+        this.meshes[key] = im; this.scene.add(im);
+      };
+      if (kind === 'rock') {                          // 岩は18三角形なので入れ替えなし
+        add('rock_lod0', geo, new THREE.MeshLambertMaterial({ vertexColors: true }), CAP.lod1);
+        continue;
       }
+      const nearMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      addDistanceFade(nearMat, false);
+      add(kind + '_lod0', geo, nearMat, CAP.lod0);
+      const imp = bakeImpostor(renderer, geo);
+      const farMat = new THREE.MeshLambertMaterial({ map: imp.texture, alphaTest: 0.4, side: THREE.DoubleSide });
+      addDistanceFade(farMat, true);
+      add(kind + '_lod1', imp.geo, farMat, CAP.lod1);
     }
     this.ready = true;
   }
   update(px, py) {
     if (!this.ready || this.frozen) return;
-    // 150m動くごとに並べ直す(毎コマはやらない)
-    if (this.last && Math.hypot(px - this.last[0], py - this.last[1]) < 150) return;
+    // 40m動くごとに並べ直す。入れ替えの帯(90〜150m)に入る木を、近景と遠景の両方に必ず入れておくため
+    if (this.last && Math.hypot(px - this.last[0], py - this.last[1]) < 40) return;
     this.last = [px, py];
     const idx = {};
     for (const k of Object.keys(this.meshes)) idx[k] = 0;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     for (const it of this.veg.around(px, py)) {
-      let key = it.kind === 'rock' ? 'rock_lod0' : `${it.kind}_${it.near ? 'lod0' : 'lod1'}`;
-      if (it.near && it.kind !== 'rock' && idx[key] >= this.meshes[key].instanceMatrix.count) key = `${it.kind}_lod1`;   // 近景が満杯なら遠景の形で
-      const im = this.meshes[key];
-      if (!im || idx[key] >= im.instanceMatrix.count) continue;
       const s = VEG.scale[it.kind] * it.s;
       q.setFromAxisAngle(up, it.rot);
       p.set(SX * it.x, it.z - 0.4 * s, it.y);          // 斜面でも浮かないよう少し沈める
       sc.set(s, s, s);
       m.compose(p, q, sc);
-      im.setMatrixAt(idx[key]++, m);
+      // 近景と遠景のどちらに入れるか。帯の前後に並べ直しの間隔(40m)ぶん余裕を持たせる。描く/消すはシェーダが距離で決める
+      const keys = it.kind === 'rock' ? ['rock_lod0']
+        : [...(it.d <= FADE_FAR + 50 ? [it.kind + '_lod0'] : []), ...(it.d >= FADE_NEAR - 50 ? [it.kind + '_lod1'] : [])];
+      for (const key of keys) {
+        const im = this.meshes[key];
+        if (!im || idx[key] >= im.instanceMatrix.count) continue;
+        im.setMatrixAt(idx[key]++, m);
+      }
     }
     for (const [k, im] of Object.entries(this.meshes)) {
       im.count = idx[k];

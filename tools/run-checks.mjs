@@ -35,6 +35,7 @@ const CHECKS = [
   ['画面から出ない',         'check-frame.mjs', []],
   ['カメラ選択(タッチ)',     'check-cam-picker.mjs', []],
   ['山脈の世界',             'check-ridge-world.mjs', []],
+  ['押しても文字が選択されない', 'check-noselect.mjs', []],
 ];
 const results = [];
 for (const [name, file, args] of CHECKS) {
