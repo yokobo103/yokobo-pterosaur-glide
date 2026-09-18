@@ -297,6 +297,9 @@ export class Vegetation {
   }
 }
 
+// この世界のいきものの見せる大きさ。実寸だと飛行高度から数ピクセルにしかならないので、全部同じ倍率で大きくする
+export const CREATURE_SCALE = 3.5;
+
 // ---------- ステゴサウルスの群れ ----------
 // 見た目のためだけの生き物で、飛び方には影響しない。群れの場所は区画ごとに種つきで決まる。
 export const HERD = {
@@ -304,7 +307,7 @@ export const HERD = {
   chance: 0.9,        // 区画に群れがいる確率
   min: 5, max: 10,    // 群れの頭数(小さい群れは上空から見つけられなかった)
   spread: 95,         // 群れの広がり [m]
-  scale: 3.5,         // 見せる大きさ(全長7m -> 24.5m)。2.5倍でも350m先で25pxしかなく見つけられなかった
+  scale: CREATURE_SCALE,   // この世界のいきものは全部3.5倍(所長 2026-09-18)。全長7m -> 24.5m
   walk: 0.21,         // 歩きの動き1回ぶんの前進の速さ [m/s](AstraのWalkクリップの値)
   timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
   active: 1800,       // この距離の群れだけ動かす [m]
@@ -395,5 +398,46 @@ export class Herds {
       if (d <= rad) out.push({ a, d });
     }
     return out.sort((p, q) => p.d - q.d);
+  }
+}
+
+// ---------- 他の翼竜 ----------
+// 上昇気流の中を旋回する。実際の鳥と同じで「あそこで回っている = 上がる空気がある」の手がかりになる
+export const FLOCK = {
+  scale: CREATURE_SCALE,
+  show: 2400,         // この距離の上昇気流に出す [m]
+  minW: 6.5,          // これより強い上昇気流にだけ集まる [m/s]
+  radius: 55,         // 旋回の半径 [m]
+  turn: 0.22,         // 旋回の速さ [rad/s]
+  max: 10,            // 同時に出す数
+};
+
+export class Flock {
+  constructor(terrain, field) { this.t = terrain; this.f = field; }
+  // 時刻 time における、近くの翼竜たちの位置・向き・傾き
+  near(px, py, time) {
+    const out = [];
+    for (const c of this.f.around(px, py, FLOCK.show)) {
+      if (c.W < FLOCK.minW) continue;
+      const d = Math.hypot(c.x - px, c.y - py);
+      if (d > FLOCK.show) continue;
+      const seed = Math.abs(Math.floor(c.x * 7.31 + c.y * 3.17));
+      const n = 1 + (seed % 3);                                  // 1〜3羽
+      for (let i = 0; i < n; i++) {
+        const phase = ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280;
+        const ang = time * FLOCK.turn * (1 + 0.15 * phase) + phase * Math.PI * 2;
+        const r = FLOCK.radius * (0.75 + 0.5 * phase);
+        // 上昇気流の中を、下から雲底へ上がっては戻るのを繰り返す
+        const u = (time * 0.012 + phase) % 1;
+        const z = c.gz + 70 + (c.top - c.gz - 70) * u;
+        out.push({
+          id: `${Math.round(c.x)},${Math.round(c.y)}:${i}`,
+          x: c.x + Math.cos(ang) * r, y: c.y + Math.sin(ang) * r, z,
+          head: -ang + Math.PI / 2,                              // 円の接線方向へ進む
+          bank: 0.5, d,
+        });
+      }
+    }
+    return out.sort((a, b) => a.d - b.d).slice(0, FLOCK.max);
   }
 }

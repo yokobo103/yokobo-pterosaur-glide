@@ -159,6 +159,17 @@ window.__slice = {
   stegoReady: () => view.stegos.ready,
   herdTune: o => Object.assign(HERD, o),
   herdScale: () => HERD.scale,
+  flyersReady: () => view.flyers.ready,
+  flyers: () => view.flyers.pool.filter(p => p.bird).map(p => {
+    const o = p.model.getObjectByName('Head'), t = p.model.getObjectByName('Tail04');
+    const v = n => { const q = new p.group.position.constructor(); n.getWorldPosition(q); return [q.x, q.y, q.z]; };
+    const ph = o && view.projectWorld(...v(o)), pt = t && view.projectWorld(...v(t));
+    return { id: p.bird.id, x: p.bird.x, y: p.bird.y, z: p.bird.z, agl: p.bird.z - terrain.height(p.bird.x, p.bird.y),
+             dist: Math.hypot(p.bird.x - glider.x, p.bird.y - glider.y),
+             lift: field.ridgeAt ? field.liftAt(p.bird.x, p.bird.y, p.bird.z, sunlight(glider.time)) : 0,
+             px: ph, sizePx: ph && pt ? Math.hypot(ph[0] - pt[0], ph[1] - pt[1]) : 0,
+             inFrame: !!ph && ph[0] > 0 && ph[0] < innerWidth && ph[1] > 0 && ph[1] < innerHeight };
+  }),
   // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
   stegos: () => view.stegos.pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };

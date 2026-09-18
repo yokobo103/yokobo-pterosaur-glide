@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { TUNE, VEG, Vegetation, HERD, Herds } from './world.js';
+import { TUNE, VEG, Vegetation, HERD, Herds, FLOCK, Flock } from './world.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
@@ -18,7 +18,7 @@ export const TRAMPLE = { radius: 150, strength: 0.85 };   // 700mまで近づか
 // 翼竜の見せる大きさ。RH02は実寸で翼開長2.2m。飛び方の計算は変えず、見た目とカメラの距離だけ変える
 //   scale: モデルの拡大率 / cam: カメラの距離の倍率
 export const SIZES = {
-  1: { name: '実寸2.2m・カメラを寄せる', scale: 1.0, cam: 0.042 },  // 所長が選んだ距離: 後ろ約5m(18m→10m→6m→5m)
+  1: { name: 'いきもの3.5倍',  scale: 3.5, cam: 0.147 },  // 翼開長7.7m。カメラも3.5倍(後ろ約17.6m)で、画面の見え方は同じ
   2: { name: '翼開長10m',               scale: 4.6, cam: 0.5 },
   3: { name: '翼開長22m(灰色の箱と同じ)', scale: 10,  cam: 1.0 },
 };
@@ -446,6 +446,51 @@ class Forest {
   }
 }
 
+// 他の翼竜。自分と同じモデルを使い回す(追加の読み込みなし)
+class Flyers {
+  constructor(terrain, field, scene) {
+    this.flock = new Flock(terrain, field); this.scene = scene;
+    this.proto = null; this.clip = null; this.pool = []; this.byId = new Map(); this.ready = false;
+  }
+  setModel(gltfScene, clips) {
+    this.proto = gltfScene; this.clip = clips.Glide_Loop; this.ready = true;
+  }
+  make() {
+    const group = new THREE.Group();
+    const model = cloneSkinned(this.proto);
+    model.rotation.y = Math.PI;                 // RH02は機首が-Z
+    model.position.y = -0.35 * FLOCK.scale;
+    model.scale.setScalar(FLOCK.scale);
+    model.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
+    group.add(model);
+    const mixer = new THREE.AnimationMixer(model);
+    const act = mixer.clipAction(this.clip);
+    act.time = Math.random() * this.clip.duration;             // 羽ばたきをそろえない
+    act.play();
+    this.scene.add(group);
+    return { group, model, mixer, bird: null };
+  }
+  update(px, py, dt, time) {
+    if (!this.ready) return;
+    const list = this.flock.near(px, py, time);
+    const keep = new Set(list.map(b => b.id));
+    for (const e of this.pool) if (e.bird && !keep.has(e.bird.id)) { this.byId.delete(e.bird.id); e.bird = null; e.group.visible = false; }
+    for (const b of list) {
+      let e = this.byId.get(b.id);
+      if (!e) {
+        e = this.pool.find(p => !p.bird) || (this.pool.push(this.make()), this.pool[this.pool.length - 1]);
+        e.bird = b; this.byId.set(b.id, e);
+      }
+      e.bird = b;
+      e.group.visible = true;
+      e.group.position.set(SX * b.x, b.z, b.y);
+      e.group.rotation.set(0, -b.head, b.bank, 'YXZ');
+      e.mixer.update(dt);
+    }
+  }
+  count() { return this.pool.filter(p => p.bird).length; }
+}
+
 // ステゴサウルス(Astraのリグ版を tools/export-stego.py で書き出したもの)。近い個体だけ骨つきで描く
 class Stegos {
   constructor(terrain, scene) {
@@ -572,6 +617,7 @@ export class View {
     this.mixer = null; this.model = null; this.modelReady = false;
     this.forest = new Forest(terrain, this.scene);
     this.stegos = new Stegos(terrain, this.scene);
+    this.flyers = new Flyers(terrain, field, this.scene);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points);
     this.fog = new THREE.FogExp2(0xc9cfc4, 0.00009);   // 暖かく湿った霞
@@ -617,6 +663,7 @@ export class View {
           this.act.idle.reset().play();
         }
       });
+      this.flyers.setModel(m, this.clips);     // 同じモデルを他の翼竜にも使う
       this.modelReady = true;
     }, undefined, err => { console.error('翼竜の読み込みに失敗。灰色の箱のまま飛ぶ', err); });
   }
@@ -674,6 +721,7 @@ export class View {
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
     this.stegos.update(g.x, g.y, dt);
+    this.flyers.update(g.x, g.y, dt, g.time);
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     // ---- 着地 ----
