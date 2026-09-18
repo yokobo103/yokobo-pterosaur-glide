@@ -92,6 +92,48 @@ for o in meshes:
             bpy.ops.object.modifier_apply(modifier='decimate')
     total_after += sum(len(p.vertices) - 2 for p in o.data.polygons)
 print('tris after', total_after, flush=True)
+
+# ---- 材質の色を頂点カラーへ焼いて、48個の部品を1つにまとめる ----
+# (部品のままだと1体48回描くことになり、18頭で864回。実測でこれが描画回数の88%だった)
+PALETTE = 'S01_palette'
+for o in meshes:
+    me = o.data
+    if PALETTE not in me.color_attributes:
+        me.color_attributes.new(name=PALETTE, type='FLOAT_COLOR', domain='CORNER')
+    ca = me.color_attributes[PALETTE]
+    me.color_attributes.active_color = ca
+    cols = {}
+    for i, sl in enumerate(o.material_slots):
+        key = next((k for k in COLORS if sl.material and sl.material.name.endswith(k)), 'Hide')
+        cols[i] = (*COLORS[key], 1.0)
+    for poly in me.polygons:
+        c = cols.get(poly.material_index, (0.3, 0.31, 0.22, 1.0))
+        for li in poly.loop_indices:
+            ca.data[li].color = c
+
+one = bpy.data.materials.new('Stego flat')
+one.use_nodes = True
+bsdf = next(n for n in one.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+attr = one.node_tree.nodes.new('ShaderNodeVertexColor'); attr.layer_name = PALETTE
+one.node_tree.links.new(attr.outputs['Color'], bsdf.inputs['Base Color'])
+bsdf.inputs['Roughness'].default_value = 0.85
+for o in meshes:
+    o.data.materials.clear()
+    o.data.materials.append(one)
+
+join_to = max(meshes, key=tris_of)
+for o in scn.objects:
+    o.select_set(False)
+for o in meshes:
+    o.select_set(True)
+scn.view_layers[0].objects.active = join_to
+with bpy.context.temp_override(scene=scn, view_layer=scn.view_layers[0], active_object=join_to,
+                               object=join_to, selected_objects=meshes, selected_editable_objects=meshes):
+    bpy.ops.object.join()
+meshes = [join_to]
+if not any(m.type == 'ARMATURE' for m in join_to.modifiers):
+    md = join_to.modifiers.new('Armature', 'ARMATURE'); md.object = arm
+print('joined into', join_to.name, tris_of(join_to), 'tris /', len(join_to.data.materials), 'material', flush=True)
 print('STEP select', flush=True)
 
 for o in scn.objects:
@@ -108,5 +150,7 @@ if True:
     bpy.ops.export_scene.gltf(filepath=out, use_selection=True, export_format='GLB', export_yup=True,
                               export_apply=False, export_animations=(MODE != 'NONE'), export_animation_mode=(MODE if MODE != 'NONE' else 'ACTIONS'),
                               export_force_sampling=True, export_frame_step=1, export_materials='EXPORT',
+                              export_vertex_color='MATERIAL', export_attributes=False,
+                              export_texcoords=False, export_tangents=False,
                               export_skins=True, export_morph=False, export_def_bones=False)
 print('EXPORTED', out, round(os.path.getsize(out) / 1024), 'KB')

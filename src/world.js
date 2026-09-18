@@ -135,16 +135,29 @@ export class Terrain {
   grain(x, y) { return fbm(x / 230, y / 230, this.seed + 907, 2); }
   // 林のかたまり(0〜1)。木の配置と、上空から見える地面の色の両方で使う
   grove(x, y) { return fbm(x / 1400, y / 1400, this.seed + 300, 3); }
-  // 湿っているほど植生が濃く、地面が暖まらない = 上昇風が立たない
-  moisture(x, y) {
+  // 谷らしさ(-1=尾根 .. +1=くぼ地)。まわりより低い所には水が集まる。
+  // これを湿り気に足すことで、地面の色が地形の形に沿う(色が形と無関係だと、上空から起伏が読めない)
+  hollow(x, y, e = 160) {
+    const z = this.height(x, y);
+    let mean = 0;
+    for (const [dx, dy] of [[e, 0], [-e, 0], [0, e], [0, -e]]) mean += this.height(x + dx, y + dy);
+    return Math.max(-1, Math.min(1, (mean / 4 - z) / 22));
+  }
+  // 湿り気のうち、地形の形によらない部分(川からの距離とまだら)。重い所ではこちらだけ使う
+  moistureBase(x, y) {
     const d = Math.abs(x - this.riverX(y));
     const near = Math.exp(-((d / 1300) ** 2));
     const patch = fbm(x / 1800, y / 1800, this.seed + 501);
-    return Math.max(0, Math.min(1, .55 * near + .75 * patch - .12));
+    return .55 * near + .75 * patch - .12;
+  }
+  // 湿っているほど植生が濃く、地面が暖まらない = 上昇風が立たない
+  moisture(x, y) {
+    return Math.max(0, Math.min(1, this.moistureBase(x, y) + TUNE.moistHollow * this.hollow(x, y)));
   }
 }
 
 export const TUNE = {
+  moistHollow: 0.30,  // 谷が湿り尾根が乾く度合い。0だと地形と植生が無関係になり、上空から起伏が読めない
   spacing: 900,       // 上昇風の間隔 [m]
   jitter: 320,
   Wmin: 5.5, Wmax: 11.0,   // 上昇風の強さ [m/s]

@@ -65,6 +65,30 @@ for (const [x, y, alt, head] of spots) {
   console.log(`  高さ${alt}m 向き${head.toFixed(1)}: 横幅の半分以上が水色の行 ${blue}`);
 }
 check(`水面のまっすぐな線が出ない(合計 ${blueTotal}行)`, blueTotal === 0);
+
+// 3. 地表がのっぺりしていないか(明暗の幅。模様と地形に沿う色が効いていれば広がる)
+const spreads = [];
+for (const [x, y, alt, head] of [[6100, -2400, 150, 2.4], [2600, -5200, 80, 1.1]]) {
+  const w = await p.evaluate(([x, y, alt, head]) => {
+    const s = window.__slice; s.auto(false); s.place(x, y, alt, head);
+    for (let i = 0; i < 20; i++) s.render();
+    const cv = document.querySelector('canvas');
+    const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height;
+    const ctx = c.getContext('2d'); ctx.drawImage(cv, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const lum = [];
+    for (let yy = Math.round(c.height * 0.6); yy < c.height - 20; yy += 3)
+      for (let xx = 8; xx < c.width - 8; xx += 5) {
+        const i = (yy * c.width + xx) * 4;
+        lum.push(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
+      }
+    lum.sort((a, b) => a - b);
+    return lum[Math.floor(lum.length * 0.9)] - lum[Math.floor(lum.length * 0.1)];
+  }, [x, y, alt, head]);
+  spreads.push(w);
+  console.log(`  高さ${alt}mの地表の明暗の幅 ${w.toFixed(0)}`);
+}
+check(`地表がのっぺりしていない(明暗の幅 ${Math.min(...spreads).toFixed(0)} 以上)`, Math.min(...spreads) >= 10);
 check('エラーなし', errs.length === 0); if (errs.length) console.log(errs.slice(0, 3));
 await b.close();
 console.log(fails ? `${fails}件 FAIL` : '全件 PASS');

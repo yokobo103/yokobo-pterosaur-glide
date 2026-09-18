@@ -1,6 +1,6 @@
 import { Terrain, ThermalField, TUNE, WORLDS, HERD, SPECIES } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
-import { View, CAMS, SIZES } from './scene.js';
+import { View, CAMS, SIZES, LIGHT, SURFACE } from './scene.js';
 import { Vario } from './audio.js';
 import { BY_ID } from './discoveries.js';
 
@@ -277,6 +277,55 @@ window.__slice = {
     view.far.mesh.material.color.set(on ? 0xff8888 : 0xffffff);
     view.horizon.mesh.material.color.set(on ? 0x8888ff : 0xffffff);
   },
+  // 検査用: 描画の内訳。名札(userData.part)ごとに、描画の回数と三角形を数える
+  sceneStats: () => {
+    const out = {};
+    view.scene.traverse(o => {
+      if (!o.geometry || !o.visible) return;
+      let p = o, part = null;
+      while (p && !part) { part = p.userData && p.userData.part; p = p.parent; }
+      part = part || 'その他';
+      const g = o.geometry;
+      const n = o.isInstancedMesh ? o.count : (o.isPoints ? 0 : 1);
+      const tri = o.isPoints ? 0 : (g.index ? g.index.count : g.attributes.position.count) / 3;
+      const e = out[part] = out[part] || { calls: 0, tris: 0 };
+      if (o.isInstancedMesh) { if (o.count) { e.calls += 1; e.tris += tri * o.count; } }
+      else { e.calls += 1; e.tris += tri * n; }
+    });
+    for (const k of Object.keys(out)) out[k].tris = Math.round(out[k].tris);
+    return out;
+  },
+  // 検査用: 名札ごとに消す(コマ時間の差分を測る)
+  hide: (name, on = false) => {
+    let n = 0;
+    view.scene.traverse(o => { if (o.userData && o.userData.part === name) { o.visible = on; n++; } });
+    return n;
+  },
+  lights: o => Object.assign(LIGHT, o || {}),            // 調整用: 光の配分を変える
+  // 調整用: 地面の模様の強さをその場で変える
+  surface: o => {
+    Object.assign(SURFACE, o || {});
+    for (const g of [view.near, view.far, view.horizon]) {
+      const sh = g.mesh.material.userData.sh;
+      if (!sh) continue;
+      sh.uniforms.uSurf.value.set(SURFACE.macro, SURFACE.meso, SURFACE.fine, SURFACE.bump);
+      sh.uniforms.uSurfAmp.value.set(SURFACE.amp[0], SURFACE.amp[1], SURFACE.amp[2], SURFACE.sand);
+      sh.uniforms.uSurfFade.value.set(SURFACE.midFade[0], SURFACE.midFade[1], SURFACE.fineFade[0], SURFACE.fineFade[1]);
+      sh.uniforms.uSurfDamp.value = SURFACE.damp;
+    }
+    return { ...SURFACE };
+  },
+  heightAt: (x, y) => terrain.height(x, y),
+  // 地面の法線(その場の傾きの向き)。陰影が形を伝えているかを測るのに使う
+  normalAt: (x, y, d = 30) => {
+    const hx = terrain.height(x + d, y) - terrain.height(x - d, y);
+    const hy = terrain.height(x, y + d) - terrain.height(x, y - d);
+    const n = [-hx / (2 * d), 1, -hy / (2 * d)];
+    const L = Math.hypot(n[0], n[1], n[2]);
+    return [n[0] / L, n[1] / L, n[2] / L];
+  },
+  sunDir: () => { const p = view.sunLight.position; const L = p.length(); return [p.x / L, p.y / L, p.z / L]; },
+  info: () => ({ calls: view.renderer.info.render.calls, tris: view.renderer.info.render.triangles }),
   waterVisible: on => { view.water.visible = on; },
   horizonVisible: on => { view.horizon.mesh.visible = on; },
   grounds: () => ({ near: view.near, far: view.far, horizon: view.horizon }),

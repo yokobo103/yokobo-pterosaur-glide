@@ -23,6 +23,14 @@ export const SIZES = {
   3: { name: '翼開長22m(灰色の箱と同じ)', scale: 10,  cam: 1.0 },
 };
 
+// 光。地面の起伏が読めるかは、直射と天空光の比で決まる。
+// 天空光が強いと、どの斜面も同じ明るさになって「のっぺり」して見える(実測: 傾き2.5°で明暗差1.8%)
+export const LIGHT = {
+  sunMin: 0.45, sunGain: 1.9,    // 直射の強さ = sunMin + sunGain * 日照
+  hemi: 0.55,                    // 天空光(空色と地面色の散乱)。1.0だと直射が埋もれて斜面の差が消えた
+  elevBase: 5, elevGain: 16,     // 太陽の高度 [度] = elevBase + elevGain * 日照
+};
+
 export const CAMS = {
   a:   { name: '水平キープ',   back: 120, up: 52, ahead: 360, look: -6,  roll: 0.0,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 本物の翼竜では up34 だと翼を真横から見て細い線になった
   b:   { name: '少しだけ傾く', back: 120, up: 52, ahead: 360, look: -6,  roll: 0.1,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
@@ -30,6 +38,90 @@ export const CAMS = {
   // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
   old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
 };
+
+// 地面の表面模様。画像は使わず、その場で計算する(追加の読み込み0バイト)。
+// 模様は「世界の座標」で決めるので、プレイヤーに合わせて格子がスナップしても模様は動かない。
+// 濃さは乾き具合・林の濃さ・傾きで変える。乾いて開けた地面ほど砂色の斑が出る = 上昇気流が期待できる目印。
+export const SURFACE = {
+  macro: 70, meso: 16, fine: 4,       // 模様の大きさ [m]
+  amp: [0.30, 0.26, 0.20],            // それぞれの濃さ
+  sand: 0.42, damp: 0.34,             // 砂色の斑 / 湿った所の暗い斑
+  midFade: [700, 1800], fineFade: [140, 420],   // この距離で細かい模様を消す(ちらつき防止)
+  bump: 0.55,                          // 模様に合わせて法線を傾ける量(立体に見せる)
+};
+
+const SURFACE_PARS = `
+  varying vec3 vSurfW;
+  varying vec3 vSurfInfo;
+  float sHash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+  float sNoise(vec2 p){
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = sHash(i), b = sHash(i + vec2(1.0, 0.0)), c = sHash(i + vec2(0.0, 1.0)), d = sHash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+`;
+
+// 地面の材質。頂点の色に、世界座標で決まる模様を重ねる。
+function surfaceMaterial() {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uSurf = { value: new THREE.Vector4(SURFACE.macro, SURFACE.meso, SURFACE.fine, SURFACE.bump) };
+    sh.uniforms.uSurfAmp = { value: new THREE.Vector4(SURFACE.amp[0], SURFACE.amp[1], SURFACE.amp[2], SURFACE.sand) };
+    sh.uniforms.uSurfFade = { value: new THREE.Vector4(SURFACE.midFade[0], SURFACE.midFade[1], SURFACE.fineFade[0], SURFACE.fineFade[1]) };
+    sh.uniforms.uSurfDamp = { value: SURFACE.damp };
+    m.userData.sh = sh;                                  // 調整用に uniform をつかんでおく
+    sh.vertexShader = sh.vertexShader
+      .replace('void main() {', `attribute vec3 aInfo;
+${SURFACE_PARS}
+void main() {`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vSurfW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        vSurfInfo = aInfo;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', `uniform vec4 uSurf;
+uniform vec4 uSurfAmp;
+uniform vec4 uSurfFade;
+uniform float uSurfDamp;
+${SURFACE_PARS}
+void main() {`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          vec2 w = vSurfW.xz;
+          float dist = length(vSurfW - cameraPosition);
+          float fadeMid = 1.0 - smoothstep(uSurfFade.x, uSurfFade.y, dist);
+          float fadeFine = 1.0 - smoothstep(uSurfFade.z, uSurfFade.w, dist);
+          float n1 = sNoise(w / uSurf.x);
+          float n2 = sNoise(w / uSurf.y);
+          float n3 = sNoise(w / uSurf.z);
+          float dry = 1.0 - vSurfInfo.x;
+          float open = 1.0 - vSurfInfo.y;
+          // 濃淡。乾いた所ほど強く出す(湿った林床はのっぺりしている方が自然)
+          float mott = (n1 - 0.5) * uSurfAmp.x * (0.6 + 0.8 * dry)
+                     + (n2 - 0.5) * uSurfAmp.y * fadeMid
+                     + (n3 - 0.5) * uSurfAmp.z * fadeFine;
+          diffuseColor.rgb *= (1.0 + mott);
+          // 乾いて開けた所には砂・礫の明るい斑、湿った所には暗い斑
+          float sandMask = smoothstep(0.55, 0.88, n1 * 0.55 + n2 * 0.45) * dry * open;
+          float dampMask = smoothstep(0.55, 0.88, 1.0 - (n1 * 0.5 + n2 * 0.5)) * (1.0 - dry);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.69, 0.50), sandMask * uSurfAmp.w);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.17, 0.27, 0.15), dampMask * uSurfDamp);
+        }`)
+      // 模様の傾きぶん法線を倒して、平らな地面でも光の当たり方が変わるようにする
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        {
+          vec2 w = vSurfW.xz;
+          float dist = length(vSurfW - cameraPosition);
+          float fadeFine = 1.0 - smoothstep(uSurfFade.z, uSurfFade.w, dist);
+          float e = uSurf.y * 0.25;
+          float hx = sNoise((w + vec2(e, 0.0)) / uSurf.y) - sNoise((w - vec2(e, 0.0)) / uSurf.y);
+          float hy = sNoise((w + vec2(0.0, e)) / uSurf.y) - sNoise((w - vec2(0.0, e)) / uSurf.y);
+          normal = normalize(normal + vec3(-hx, 0.0, -hy) * uSurf.w * fadeFine);
+        }`);
+  };
+  m.customProgramCacheKey = () => 'ground-surface';
+  return m;
+}
 
 // 地形は運ばず、その場で作る。プレイヤーに合わせて格子をスナップして高さを引き直す。
 class Ground {
@@ -45,11 +137,13 @@ class Ground {
       const a = j * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
       idx.push(a, b, c, b, d, c);   // SXでX反転しているぶん巻き順も反転
     }
+    this.info = new Float32Array(n * 3);      // 湿り気・林の濃さ・傾き(模様の出し分けに使う)
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    g.setAttribute('aInfo', new THREE.BufferAttribute(this.info, 3));
     g.setIndex(idx);
     this.geo = g;
-    this.mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    this.mesh = new THREE.Mesh(g, surfaceMaterial());
     this.mesh.frustumCulled = false;
     this.snap = null;
   }
@@ -72,14 +166,28 @@ class Ground {
     const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
     const tintColor = new THREE.Color();
     const c = new THREE.Color();
+    // 1周目: 高さだけ入れる。傾きと谷らしさは、隣の頂点から出せば高さを引き直さずに済む
+    // (terrain.slope() は1回で高さを5回引くので、頂点ごとに呼ぶと作り直しが何倍にもなる)
+    const zs = this.zs = this.zs || new Float32Array((s + 1) * (s + 1));
+    for (let j = 0; j <= s; j++) for (let i = 0; i <= s; i++) {
+      zs[j * (s + 1) + i] = t.height(cx - half + i * this.cell, cy - half + j * this.cell);
+    }
+    const R = Math.max(1, Math.round(160 / this.cell));    // 谷らしさを見る範囲(約160m)
+    const at = (i, j) => zs[Math.min(s, Math.max(0, j)) * (s + 1) + Math.min(s, Math.max(0, i))];
     for (let j = 0; j <= s; j++) for (let i = 0; i <= s; i++) {
       const k = (j * (s + 1) + i) * 3;
       const x = cx - half + i * this.cell, y = cy - half + j * this.cell;
-      let z = t.height(x, y);
+      const z0 = zs[j * (s + 1) + i];
+      let z = z0;
       // 内側は高精細メッシュが描くので、ここは沈めて隠す
       if (hole && Math.abs(x - cx) <= hole && Math.abs(y - cy) <= hole) z = -9999;
       this.pos[k] = SX * x; this.pos[k + 1] = z; this.pos[k + 2] = y;
-      const m = t.moisture(x, y);
+      // 隣との差から傾き、まわりの平均との差から谷らしさ
+      const zL = at(i - 1, j), zR = at(i + 1, j), zD = at(i, j - 1), zU = at(i, j + 1);
+      const slope01 = Math.min(1, Math.max(Math.abs(zR - zL), Math.abs(zU - zD)) / (2 * this.cell) / 0.3);
+      const mean = (at(i - R, j) + at(i + R, j) + at(i, j - R) + at(i, j + R)) / 4;
+      const hollow = Math.max(-1, Math.min(1, (mean - z0) / 22));
+      const m = Math.max(0, Math.min(1, t.moistureBase(x, y) + TUNE.moistHollow * hollow));
       // 湿り気は大半が中くらいで、そのまま混ぜるとオリーブ色になって何も変わらなかった。差を強調して振り分ける
       const mm = Math.min(1, Math.max(0, (m - 0.3) / 0.3));
       c.copy(dry).lerp(wet, mm * mm * (3 - 2 * mm));
@@ -99,7 +207,10 @@ class Ground {
       c.multiplyScalar(grain);
       if (z < t.water + 1.2) c.lerp(sand, 0.8);
       this.col[k] = c.r; this.col[k + 1] = c.g; this.col[k + 2] = c.b;
+      // 模様の出し分けに使う(湿り気・林の濃さ・傾き)
+      this.info[k] = m; this.info[k + 1] = gv; this.info[k + 2] = slope01;
     }
+    this.geo.attributes.aInfo.needsUpdate = true;
     this.geo.attributes.position.needsUpdate = true;
     this.geo.computeVertexNormals();
     // 急な斜面は岩の色に。法線から出すので高さの再計算は要らない
@@ -396,7 +507,7 @@ class Forest {
         const im = new THREE.InstancedMesh(g, mat, cap);
         im.count = 0; im.frustumCulled = false;
         im.userData.tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
-        this.meshes[key] = im; this.scene.add(im);
+        im.userData.part = '木と岩'; this.meshes[key] = im; this.scene.add(im);
       };
       if (kind === 'rock') {                          // 岩は18三角形なので入れ替えなし
         add('rock_lod0', geo, new THREE.MeshLambertMaterial({ vertexColors: true }), CAP.lod1);
@@ -483,6 +594,7 @@ class Flyers {
     const act = mixer.clipAction(this.clip);
     act.time = Math.random() * this.clip.duration;             // 羽ばたきをそろえない
     act.play();
+    group.userData.part = '他の翼竜';
     this.scene.add(group);
     return { group, model, mixer, bird: null };
   }
@@ -580,6 +692,7 @@ class Discoveries {
     addDistanceFade(farMat, true);
     const far = new THREE.InstancedMesh(imp.geo, farMat, 40 * num);
     far.count = 0; far.frustumCulled = false; far.userData.tris = imp.geo.attributes.position.count / 3;
+    near.userData.part = far.userData.part = '発見';
     this.scene.add(near, far);
     this.kinds.set(type.id, { near, far });
     this.loading.delete(type.id);
@@ -635,8 +748,8 @@ class Discoveries {
 // 群れで暮らす恐竜(Astraのリグ版を tools/export-*.py で書き出したもの)。近い個体だけ骨つきで描く。
 // 種類ごとに1つ作る。動きは Idle と Walk の2つのクリップを使う
 class Creatures {
-  constructor(terrain, scene, cfg = HERD) {
-    this.t = terrain; this.scene = scene; this.cfg = cfg; this.herds = new Herds(terrain, cfg);
+  constructor(terrain, scene, cfg = HERD, part = 'いきもの') {
+    this.t = terrain; this.scene = scene; this.cfg = cfg; this.part = part; this.herds = new Herds(terrain, cfg);
     this.proto = null; this.clips = null; this.pool = []; this.byId = new Map(); this.ready = false;
 
   }
@@ -656,6 +769,7 @@ class Creatures {
     const idle = mixer.clipAction(this.clips.Idle), walk = mixer.clipAction(this.clips.Walk);
     walk.timeScale = this.cfg.timeScale;
     idle.play();
+    group.userData.part = this.part;
     this.scene.add(group);
     return { group, model, mixer, idle, walk, animal: null, state: 'idle' };
   }
@@ -733,7 +847,8 @@ export class View {
     this.camera = new THREE.PerspectiveCamera(cam.fov, 1, 0.5, 18000);
     this.sunLight = new THREE.DirectionalLight(0xffe6c4, 1.5);
     this.sunLight.position.set(-0.4, 1, 0.5);
-    this.scene.add(this.sunLight, new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, 1.0));
+    this.hemiLight = new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, LIGHT.hemi);
+    this.scene.add(this.sunLight, this.hemiLight);
     // 地面は3層。近景(細かい) / 遠景 / 地平(粗い)。
     // 地平の層が無いと、遠景が終わる6.5km先から水の板が見えて、まっすぐな川のような線になった
     this.horizon = new Ground(terrain, 34000, 68, { coarse: true });   // 升目500m。霧でほとんど見えない
@@ -741,11 +856,12 @@ export class View {
                                                     // (近景に対して面が上に出る量は最大2.8m。1.3km先では見えない)
     this.near = new Ground(terrain, 2600, 72);
     this.scene.add(this.horizon.mesh, this.far.mesh, this.near.mesh);
+    for (const m of [this.horizon.mesh, this.far.mesh, this.near.mesh]) m.userData.part = '地面';
     const water = new THREE.Mesh(new THREE.PlaneGeometry(30000, 30000),
       new THREE.MeshLambertMaterial({ color: 0x4d7fa8, transparent: true, opacity: 0.85 }));
     water.rotation.x = -Math.PI / 2; water.position.y = terrain.water + 0.6;
     water.frustumCulled = false;
-    this.scene.add(water); this.water = water;
+    this.scene.add(water); this.water = water; water.userData.part = '水面';
     // 夕日。+Y(スコアが伸びる向き)の空に固定で置く。方位の手がかりと残り時間を兼ねる
     this.sunDisc = new THREE.Mesh(new THREE.CircleGeometry(1, 40),
       new THREE.MeshBasicMaterial({ color: 0xfff0cc, fog: false, transparent: true, depthWrite: false }));
@@ -754,21 +870,23 @@ export class View {
     this.dust = new Dust(field);
     this.clouds = new Clouds(field);
     this.scene.add(this.dust.points, this.clouds.points);
+    this.dust.points.userData.part = '土ぼこり'; this.clouds.points.userData.part = '雲';
     // 機体: 外側のグループが向きと傾きを持つ(+Zが機首)。中身は読み込むまで灰色の箱
     this.glider = new THREE.Group();
     this.placeholder = makeGlider();
     this.placeholder.scale.setScalar(size.scale / 10);   // 灰色の箱は翼開長22m相当
     this.glider.add(this.placeholder);
+    this.glider.userData.part = '自機';
     this.scene.add(this.glider);
     this.mixer = null; this.model = null; this.modelReady = false;
     this.forest = new Forest(terrain, this.scene);
-    this.stegos = new Creatures(terrain, this.scene, SPECIES.stego);
-    this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo);
+    this.stegos = new Creatures(terrain, this.scene, SPECIES.stego, 'ステゴ');
+    this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo, 'ドリオ');
     this.flyers = new Flyers(terrain, field, this.scene);
     this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds } });
     this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
     this.plumes = new Plumes(terrain);
-    this.scene.add(this.plumes.points);
+    this.scene.add(this.plumes.points); this.plumes.points.userData.part = '噴煙';
     this.fog = new THREE.FogExp2(0xc9cfc4, 0.00009);   // 暖かく湿った霞
     this.scene.fog = this.fog;
     this.camHead = null;      // 機体の向きに遅れて追従する。旋回を「見える」ようにするため
@@ -929,9 +1047,10 @@ export class View {
       ? day.clone().lerp(dusk, (1 - sun) / 0.65)
       : dusk.clone().lerp(night, (0.35 - sun) / 0.35);
     this.scene.background = sky; this.fog.color = sky;
-    this.sunLight.intensity = 0.35 + 1.25 * sun;
+    this.sunLight.intensity = LIGHT.sunMin + LIGHT.sunGain * sun;
+    this.hemiLight.intensity = LIGHT.hemi;
     // 太陽は +Y の方角、高度は日照とともに下がる
-    const elev = (2.5 + 11 * sun) * Math.PI / 180, D = 9000;
+    const elev = (LIGHT.elevBase + LIGHT.elevGain * sun) * Math.PI / 180, D = 9000;
     const sx = SX * g.x, sy = g.z + Math.sin(elev) * D + 60, sz = g.y + Math.cos(elev) * D;
     this.sunDisc.position.set(sx, sy, sz);
     this.sunDisc.scale.setScalar(300 + 260 * (1 - sun));
