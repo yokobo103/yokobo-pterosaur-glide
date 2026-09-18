@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TUNE, VEG, Vegetation, HERD, Herds, FLOCK, Flock } from './world.js';
+import { DiscoverySites } from './discoveries.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // three.jsは右手系で、+X は画面の左に出る。
@@ -9,7 +10,6 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 const SX = -1;
 
 // 群れのいる地面の踏み荒らし。上空から群れを見つける唯一の手がかり(個体は500m先で18pxしかない)
-export const TRAMPLE = { radius: 150, strength: 0.85 };   // 700mまで近づかないと気づけなかったので広げた
 
 // カメラの型。酔いは人によるので、並べて選ぶ。?cam=a / b / c
 //   roll:    機体の傾きに対してカメラをどれだけ傾けるか(0=地平線は常に水平)
@@ -53,9 +53,9 @@ class Ground {
     this.mesh.frustumCulled = false;
     this.snap = null;
   }
-  update(px, py, herds = []) {
+  update(px, py, marks = []) {
     const cx = Math.round(px / this.cell) * this.cell, cy = Math.round(py / this.cell) * this.cell;
-    const herdKey = herds.map(h => Math.round(h.cx) + ',' + Math.round(h.cy)).join('|');
+    const herdKey = marks.map(m => Math.round(m.x) + ',' + Math.round(m.y)).join('|');
     if (this.snap && this.snap[0] === cx && this.snap[1] === cy && this.herdKey === herdKey) return false;
     this.herdKey = herdKey;
     this.snap = [cx, cy];
@@ -63,7 +63,7 @@ class Ground {
     // ジュラ紀には草原がない。乾いた所は赤茶の土、湿った所はシダの緑、水辺は泥(黄土色の「草原」に見えていた)
     const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x4f7d38), sand = new THREE.Color(0x7a6448);
     const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
-    const trampled = new THREE.Color(0x6d5238);
+    const tintColor = new THREE.Color();
     const c = new THREE.Color();
     for (let j = 0; j <= s; j++) for (let i = 0; i <= s; i++) {
       const k = (j * (s + 1) + i) * 3;
@@ -82,11 +82,11 @@ class Ground {
         const k = Math.min(1, (gv - 0.47) / 0.08) * 0.7;
         c.lerp(m < 0.5 ? canopyDry : canopyWet, k);
       }
-      // 群れがいる所は踏み荒らされた土。上空から「あそこに何かいる」と分かる目印
+      // 発見対象の目印。上空から「あそこに何かある」と分かるように地面の色を変える
       // (土ぼこりで示したら上昇気流の柱と見分けがつかなかった)
-      for (const hd of herds) {
-        const dh = Math.hypot(x - hd.cx, y - hd.cy);
-        if (dh < TRAMPLE.radius) { c.lerp(trampled, TRAMPLE.strength * (1 - dh / TRAMPLE.radius) ** 0.6); break; }
+      for (const mk of marks) {
+        const dh = Math.hypot(x - mk.x, y - mk.y);
+        if (dh < mk.r) { tintColor.set(mk.color); c.lerp(tintColor, mk.strength * (1 - dh / mk.r) ** 0.6); break; }
       }
       const grain = 0.92 + 0.18 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)。暗く沈めすぎない
       c.multiplyScalar(grain);
@@ -491,6 +491,110 @@ class Flyers {
   count() { return this.pool.filter(p => p.bird).length; }
 }
 
+// 発見対象のうち、自前の見た目を持つもの。
+// model.url があればGLBを読む(Astra製アセットはこれ)。model.build があればその場で形を作る。
+// 遠くは木と同じ方式で、モデルを撮った画像を板に貼ったものに入れ替える(1体6三角形)。
+class Discoveries {
+  constructor(sites, scene, renderer) {
+    this.sites = sites; this.scene = scene; this.renderer = renderer;
+    this.kinds = new Map();          // typeId -> { near, far, pool }
+    this.loading = new Set();
+  }
+  buildGeometry(build) {
+    // 営巣地: 浅いくぼみと、寄せ集めた卵
+    if (build === 'nest') {
+      const parts = [];
+      const paint = (geo, color) => {
+        const g = geo.toNonIndexed();
+        for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+        const n = g.attributes.position.count, col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { col[i * 3] = color.r; col[i * 3 + 1] = color.g; col[i * 3 + 2] = color.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        parts.push(g);
+      };
+      const rim = new THREE.TorusGeometry(2.2, 0.55, 5, 14); rim.rotateX(Math.PI / 2); rim.translate(0, 0.25, 0);
+      paint(rim, new THREE.Color(0.42, 0.33, 0.22));
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2, r = 0.5 + 0.5 * ((i * 7) % 3) / 3;
+        const egg = new THREE.SphereGeometry(0.45, 7, 5); egg.scale(1, 1.35, 1);
+        egg.translate(Math.cos(a) * r, 0.45, Math.sin(a) * r);
+        paint(egg, new THREE.Color(0.74, 0.70, 0.58));
+      }
+      return mergeGeometries(parts, false);
+    }
+    return new THREE.BufferGeometry();
+  }
+  async ensure(type) {
+    if (this.kinds.has(type.id) || this.loading.has(type.id) || !type.model) return;
+    this.loading.add(type.id);
+    let geo = null, material = null;
+    if (type.model.build) {
+      geo = this.buildGeometry(type.model.build);
+      material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    } else {
+      const gltf = await new GLTFLoader().loadAsync(type.model.url);
+      const parts = [];
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse(o => {
+        if (!o.isMesh) return;
+        const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+        for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+        const c = (o.material && o.material.color) ? o.material.color.clone().multiplyScalar(1.35) : new THREE.Color(0.35, 0.35, 0.35);
+        const n = g.attributes.position.count, col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        parts.push(g);
+      });
+      geo = mergeGeometries(parts, false);
+      material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    }
+    addDistanceFade(material, false);
+    const near = new THREE.InstancedMesh(geo, material, 12);
+    near.count = 0; near.frustumCulled = false; near.userData.tris = geo.attributes.position.count / 3;
+    const imp = bakeImpostor(this.renderer, geo);
+    const farMat = new THREE.MeshLambertMaterial({ map: imp.texture, alphaTest: 0.4, side: THREE.DoubleSide });
+    addDistanceFade(farMat, true);
+    const far = new THREE.InstancedMesh(imp.geo, farMat, 40);
+    far.count = 0; far.frustumCulled = false; far.userData.tris = 6;
+    this.scene.add(near, far);
+    this.kinds.set(type.id, { near, far });
+    this.loading.delete(type.id);
+  }
+  update(px, py) {
+    // 50m動くまでは並べ直さない(探すのは毎コマやるほどのことではない)
+    if (this.last && Math.hypot(px - this.last[0], py - this.last[1]) < 50 && !this.loading.size) return;
+    this.last = [px, py];
+    const counts = {};
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    for (const [, k] of this.kinds) { k.near.count = 0; k.far.count = 0; }
+    for (const site of this.sites.near(px, py, 3000)) {
+      const type = site.type;
+      if (!type.model) continue;
+      if (site.d > (type.model.draw || 2200)) continue;
+      if (!this.kinds.has(type.id)) { this.ensure(type); continue; }
+      const k = this.kinds.get(type.id);
+      const target = site.d <= 200 ? k.near : k.far;      // 近くは本物、遠くは板(入れ替えは距離でぼかす)
+      const both = site.d > 90 && site.d < 260 ? [k.near, k.far] : [target];
+      q.setFromAxisAngle(up, (site.x * 0.7 + site.y * 0.3) % (Math.PI * 2));
+      p.set(SX * site.x, site.z, site.y);
+      sc.setScalar(type.model.scale || 1);
+      m.compose(p, q, sc);
+      for (const im of both) {
+        if (im.count >= im.instanceMatrix.count) continue;
+        im.setMatrixAt(im.count++, m);
+        counts[type.id] = (counts[type.id] || 0) + 1;
+      }
+    }
+    for (const [, k] of this.kinds) { k.near.instanceMatrix.needsUpdate = true; k.far.instanceMatrix.needsUpdate = true; }
+    this.counts = counts;
+  }
+  triangles() {
+    let t = 0;
+    for (const [, k] of this.kinds) t += k.near.count * k.near.userData.tris + k.far.count * 6;
+    return t;
+  }
+}
+
 // ステゴサウルス(Astraのリグ版を tools/export-stego.py で書き出したもの)。近い個体だけ骨つきで描く
 class Stegos {
   constructor(terrain, scene) {
@@ -618,6 +722,8 @@ export class View {
     this.forest = new Forest(terrain, this.scene);
     this.stegos = new Stegos(terrain, this.scene);
     this.flyers = new Flyers(terrain, field, this.scene);
+    this.sites = new DiscoverySites({ terrain, field, herds: this.stegos.herds });
+    this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points);
     this.fog = new THREE.FogExp2(0xc9cfc4, 0.00009);   // 暖かく湿った霞
@@ -714,14 +820,15 @@ export class View {
     return [(q.x + 1) / 2 * s.x, (1 - (q.y + 1) / 2) * s.y];
   }
   update(g, dt, sun) {
-    const herdCenters = this.stegos ? [...this.stegos.herds.herdsNear(g.x, g.y, 9000)] : [];
-    this.far.update(g.x, g.y, herdCenters);
-    this.near.update(g.x, g.y, herdCenters);
+    const marks = this.sites ? this.sites.tints(g.x, g.y, 9000) : [];
+    this.far.update(g.x, g.y, marks);
+    this.near.update(g.x, g.y, marks);
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
     this.stegos.update(g.x, g.y, dt);
     this.flyers.update(g.x, g.y, dt, g.time);
+    this.discoveries.update(g.x, g.y);
     this.dust.update(g.x, g.y, dt, sun);
     this.clouds.update(g.x, g.y, sun);
     // ---- 着地 ----

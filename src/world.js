@@ -52,6 +52,16 @@ export class Terrain {
     this.peakCells.set(key, pk);
     return pk;
   }
+  // 近くの高い山(発見の対象にも使う)
+  peaksNear(x, y, rad) {
+    if (!TUNE.peakChance) return [];
+    const S = TUNE.peakCell, n = Math.ceil(rad / S) + 1, ci = Math.floor(x / S), cj = Math.floor(y / S), out = [];
+    for (let i = ci - n; i <= ci + n; i++) for (let j = cj - n; j <= cj + n; j++) {
+      const p = this.peakIn(i, j);
+      if (p && !p.volcano && Math.hypot(p.x - x, p.y - y) <= rad) out.push({ key: `peak:${Math.round(p.x)},${Math.round(p.y)}`, x: p.x, y: p.y });
+    }
+    return out;
+  }
   // 近くの火山(噴煙を出す位置)
   volcanoesNear(x, y, rad) {
     if (!TUNE.peakChance) return [];

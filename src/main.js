@@ -1,7 +1,8 @@
 import { Terrain, ThermalField, TUNE, WORLDS, HERD } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
-import { View, CAMS, SIZES, TRAMPLE } from './scene.js';
+import { View, CAMS, SIZES } from './scene.js';
 import { Vario } from './audio.js';
+import { BY_ID } from './discoveries.js';
 
 const q = new URLSearchParams(location.search);
 const SEED = Number(q.get('seed') ?? Math.floor(Math.random() * 9999));
@@ -22,11 +23,10 @@ const el = id => document.getElementById(id);
 const ui = {
   dist: el('dist'), alt: el('alt'), fill: el('varioFill'),
   msg: el('msg'), msgTitle: el('msgTitle'), msgSub: el('msgSub'),
+  found: el('found'), foundKind: el('foundKind'), foundName: el('foundName'), foundList: el('foundList'),
   start: el('start'), go: el('go'),
 };
 
-if (q.has('trample')) TRAMPLE.strength = Number(q.get('trample'));      // 調整用
-if (q.has('trampleR')) TRAMPLE.radius = Number(q.get('trampleR'));
 const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'hills';   // 既定は丘のある世界。?world=flat で起伏なし
 Object.assign(TUNE, WORLDS[WORLD]);
 if (WORLD === 'ridge') {
@@ -104,6 +104,7 @@ function finish() {
   ui.msgTitle.textContent = (glider.best / 1000).toFixed(2) + ' km';
   ui.msgSub.textContent = sunlight(glider.time) <= 0.02
     ? '日が暮れて、空気が上がらなくなった' : '降りた。もう一度: R キー / 画面を二回たたく';
+  renderFoundList();
   // 着地の動きを見せてから記録を出す(やり直しはすぐ効く)
   const shownFor = glider;
   setTimeout(() => { if (ended && glider === shownFor) ui.msg.classList.remove('hidden'); }, 2200);
@@ -111,6 +112,8 @@ function finish() {
 
 function reset() {
   glider = new Glider(terrain, field);
+  found = []; foundKeys = new Set(); foundTimer = 0;
+  ui.found.classList.add('hidden'); ui.found.classList.remove('show');
   if (auto) auto = new Autopilot();
   ended = false; running = true;
   ui.msg.classList.add('hidden');
@@ -118,8 +121,59 @@ function reset() {
 addEventListener('keydown', e => { if ((e.key === 'r' || e.key === 'R') && ended) reset(); });
 cv.addEventListener('dblclick', () => { if (ended) reset(); });
 
+// ---- 発見 ----
+// 一定距離まで近づいたら発見。飛行は止めず、控えめに知らせるだけ。
+const FOUND_STORE = 'glide.found';          // これまでに見つけたもの(ずかん)
+let foundAll = new Set();
+try { foundAll = new Set(JSON.parse(localStorage.getItem(FOUND_STORE) || '[]')); } catch (e) { /* 保存できない環境でも遊べる */ }
+let found = [], foundKeys = new Set(), foundTimer = 0, nextScan = 0;
+
+function showFound(item) {
+  ui.foundKind.textContent = item.first ? 'NEW DISCOVERY' : 'DISCOVERED';
+  ui.foundName.textContent = item.name;
+  ui.found.classList.remove('hidden');
+  ui.found.classList.add('show');
+  foundTimer = 2.6;
+}
+
+function scanDiscoveries(dt) {
+  if (!running || !glider.alive) return;
+  if (foundTimer > 0) {
+    foundTimer -= dt;
+    if (foundTimer <= 0) { ui.found.classList.remove('show'); setTimeout(() => ui.found.classList.add('hidden'), 500); }
+  }
+  nextScan -= dt;
+  if (nextScan > 0) return;
+  nextScan = 0.25;
+  for (const site of view.sites.near(glider.x, glider.y, 1600)) {
+    if (site.d > site.type.radius || foundKeys.has(site.key)) continue;
+    foundKeys.add(site.key);
+    const first = !foundAll.has(site.type.id);
+    foundAll.add(site.type.id);
+    try { localStorage.setItem(FOUND_STORE, JSON.stringify([...foundAll])); } catch (e) { /* 覚えられなくても遊べる */ }
+    const item = { id: site.type.id, name: site.type.name, desc: site.type.desc, rarity: site.type.rarity, first };
+    found.push(item);
+    showFound(item);
+    break;                                   // 一度に1つだけ知らせる
+  }
+}
+
+function renderFoundList() {
+  if (!found.length) { ui.foundList.innerHTML = '<div class="none">今回の発見はなし</div>'; return; }
+  const seen = new Map();
+  for (const f of found) seen.set(f.id, { ...f, n: (seen.get(f.id)?.n || 0) + 1 });
+  ui.foundList.innerHTML = [...seen.values()].map(f =>
+    `<div class="item"><b>${f.name}</b>${f.n > 1 ? `<i>×${f.n}</i>` : ''}<i>${f.rarity}</i>${f.first ? '<em>はじめて</em>' : ''}</div><p>${f.desc}</p>`).join('');
+}
+
 const STEP = 1 / 60;
 let acc = 0, last = performance.now();
+
+// 走行が終わったかの判定。実際の遊びでも検査用のコマ送りでも、必ずここを通す
+function checkEnd() {
+  if (ended) return;
+  if (!glider.alive || (sunlight(glider.time) <= 0 && glider.vz < 0 && glider.agl < 3)) finish();
+}
 
 function advance(dt) {
   if (!running || !glider.alive) return;
@@ -129,7 +183,7 @@ function advance(dt) {
     glider.step(STEP, input(STEP));
     acc -= STEP;
   }
-  if (!glider.alive || sunlight(glider.time) <= 0 && glider.vz < 0 && glider.agl < 3) finish();
+  checkEnd();
 }
 
 function frame(now) {
@@ -137,6 +191,7 @@ function frame(now) {
   advance(dt);
   view.update(glider, dt, sunlight(glider.time));
   vario.update(glider.vz, dt);
+  scanDiscoveries(dt);
   hud();
   if (!HARNESS) requestAnimationFrame(frame);
 }
@@ -198,6 +253,8 @@ window.__slice = {
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) { if (!running || !glider.alive) break; glider.step(STEP, input(STEP)); }
     if (render) { view.update(glider, STEP, sunlight(glider.time)); hud(); }
+    scanDiscoveries(seconds);        // 実際の遊びと同じ経路を通す(描画の有無によらず発見は起きる)
+    checkEnd();
     return this.state();
   },
   state() {
@@ -217,7 +274,7 @@ window.__slice = {
     }
     return out.sort((a, b) => a.d - b.d).slice(0, 12);
   },
-  render() { view.update(glider, STEP, sunlight(glider.time)); hud(); },
+  render() { view.update(glider, STEP, sunlight(glider.time)); scanDiscoveries(STEP); hud(); },
   // 検査用: 好きな場所・高さ(地面から)・向きに置く
   place(x, y, agl, head = 0) {
     glider.x = x; glider.y = y; glider.z = terrain.height(x, y) + agl; glider.head = head;
@@ -229,6 +286,12 @@ window.__slice = {
   landing: () => view.landing && view.act ? { t: view.landing.t, shift: view.landShift, tracks: view.rootTrackNames, land: view.act.land.isRunning(), idle: view.act.idle.isRunning(), glide: view.act.glide.isRunning(),
     groundY: terrain.height(view.landing.x, view.landing.y), bones: ['Head', 'HandL', 'HandR', 'FootL', 'FootR'].map(n => view.boneInfo(n)) } : null,
   boneY: name => { const o = view.model && view.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new o.position.constructor()); return v.y; },
+  // 検査用: 近くの発見対象と、今回の発見
+  sites: (rad = 2600) => view.sites.near(glider.x, glider.y, rad).map(s => ({ id: s.type.id, name: s.type.name, key: s.key, x: s.x, y: s.y, d: s.d, radius: s.type.radius })),
+  found: () => found.map(f => ({ id: f.id, name: f.name, first: f.first })),
+  foundVisible: () => ui.found.classList.contains('show') ? ui.foundName.textContent : null,
+  foundListText: () => ui.foundList.textContent,
+  discoveryTris: () => view.discoveries.triangles(),
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),

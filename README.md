@@ -43,6 +43,32 @@ npm run dev     # http://localhost:8141
 
 測定の詳細は `docs/FINDINGS.md`。
 
+## 発見（Discovery）
+
+飛びながら「あれは何だ」と思って近づくと発見になる。飛行は止まらず、控えめな知らせが出て、走行の終わりに今回の発見だけ並ぶ。
+
+**発見できるものを足す方法**は `src/discoveries.js` の `DISCOVERIES` に1つ書くだけ。飛び方の計算には触れない。
+
+```js
+{
+  id: 'astra_dryosaurus',            // 重複しない名前
+  name: 'ドリオサウルスの群れ',        // 画面に出る名称
+  desc: '二足で走る小型の草食恐竜。…',  // 終わりの一覧に出る説明
+  rarity: 'ときどき',                 // 希少度(表示だけ)
+  radius: 320,                       // この距離まで近づくと発見
+  spawn: { kind: 'cell', cell: 4200, chance: 0.6, salt: 31,
+           pick: (ctx, x, y) => ctx.terrain.moisture(x, y) > 0.5 },   // 出現条件
+  cue:   { color: 0x6d5238, radius: 120, strength: 0.8 },  // 任意: 地面の色を変えて遠くから気づけるようにする
+  model: { url: 'models/dryosaurus.glb', scale: 3.5, draw: 2200 },    // 任意: Astra製GLBはここに置く
+}
+```
+
+- `spawn.kind` は `herd`(ステゴの群れに付く) / `volcano` / `peak` / `cell`(条件に合う場所を探す) から選ぶ。
+  新しい置き方(バイオーム別・完全ランダムなど)は `SPAWNERS` に足せば、種類側は1行で使える
+- `model` を書かなければ、地形やすでにいるいきものをそのまま発見対象にできる(追加の描画は0)
+- `model` を書くと、近くは本物・遠くは**モデルを撮った画像を貼った板**(1体6三角形)に自動で入れ替わる。
+  GLBは `public/models/` に置き、テクスチャは `tools/glb-jpeg.py` で縮めてから使う
+
 ## 構成
 
 ```

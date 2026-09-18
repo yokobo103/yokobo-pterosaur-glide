@@ -41,6 +41,20 @@
   #start #cams button[aria-checked="true"] { background:rgba(127,224,138,.16); color:#fff; border-color:#7fe08a; }
   #start #cams button[aria-checked="true"]::before { content:"✓ "; color:#7fe08a; }
   #start p.note { font-size:11px; opacity:.6; margin-top:-6px; }
+  /* 発見の知らせ。飛行を止めず、視界の邪魔をしない大きさで出して消える */
+  #found { position:fixed; left:0; right:0; top:22%; text-align:center; pointer-events:none;
+           opacity:0; transition:opacity .45s ease; }
+  #found.show { opacity:1; }
+  #found span { display:block; font-size:11px; letter-spacing:.34em; color:#ffd79a; text-shadow:0 1px 4px rgba(0,0,0,.7); }
+  #found b { display:block; font-size:19px; font-weight:650; color:#fff; margin-top:3px; text-shadow:0 1px 4px rgba(0,0,0,.8); }
+  /* 走行の終わりに、今回見つけたものだけ並べる */
+  #foundList { margin:14px auto 0; max-width:22rem; text-align:left; }
+  #foundList .item { display:flex; gap:8px; align-items:baseline; padding:5px 0; border-top:1px solid rgba(255,255,255,.14); }
+  #foundList .item b { font-size:14px; font-weight:600; }
+  #foundList .item i { font-size:11px; opacity:.6; font-style:normal; }
+  #foundList .item em { font-size:11px; color:#ffd79a; font-style:normal; }
+  #foundList p { font-size:11px; opacity:.72; margin:2px 0 0; line-height:1.6; }
+  #foundList .none { font-size:12px; opacity:.6; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -53,7 +67,8 @@
     </div>
   </div>
   <div id="vario"><div id="varioFill"></div><div id="varioZero"></div></div>
-  <div id="msg" class="hidden"><b id="msgTitle"></b><span id="msgSub"></span></div>
+  <div id="found" class="hidden"><span id="foundKind">DISCOVERED</span><b id="foundName"></b></div>
+  <div id="msg" class="hidden"><b id="msgTitle"></b><span id="msgSub"></span><div id="foundList"></div></div>
   <div id="start">
     <h1>翼竜滑空 — 縦切り試作</h1>
     <p>
