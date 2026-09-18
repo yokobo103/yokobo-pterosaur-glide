@@ -40,6 +40,7 @@ const CHECKS = [
   ['ステゴサウルス',         'check-stego.mjs', []],
   ['他の翼竜',               'check-flyers.mjs', []],
   ['発見',                   'check-discovery.mjs', []],
+  ['ドリオサウルス',         'check-dryo.mjs', []],
 ];
 const results = [];
 for (const [name, file, args] of CHECKS) {

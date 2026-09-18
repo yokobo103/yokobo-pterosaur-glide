@@ -59,15 +59,21 @@ npm run dev     # http://localhost:8141
   spawn: { kind: 'cell', cell: 4200, chance: 0.6, salt: 31,
            pick: (ctx, x, y) => ctx.terrain.moisture(x, y) > 0.5 },   // 出現条件
   cue:   { color: 0x6d5238, radius: 120, strength: 0.8 },  // 任意: 地面の色を変えて遠くから気づけるようにする
-  model: { url: 'models/dryosaurus.glb', scale: 3.5, draw: 2200 },    // 任意: Astra製GLBはここに置く
+  model: { url: 'models/dryo.glb', scale: 3.5, draw: 2400,  // 任意: Astra製GLBはここに置く
+           count: 5, spread: 55, impostor: 'cross' },       // 任意: 何頭を何m四方に散らすか / 遠景の板の作り方
 }
 ```
 
 - `spawn.kind` は `herd`(ステゴの群れに付く) / `volcano` / `peak` / `cell`(条件に合う場所を探す) から選ぶ。
   新しい置き方(バイオーム別・完全ランダムなど)は `SPAWNERS` に足せば、種類側は1行で使える
 - `model` を書かなければ、地形やすでにいるいきものをそのまま発見対象にできる(追加の描画は0)
-- `model` を書くと、近くは本物・遠くは**モデルを撮った画像を貼った板**(1体6三角形)に自動で入れ替わる。
+- `model` を書くと、近くは本物・遠くは**モデルを撮った画像を貼った板**に自動で入れ替わる(90〜150mでぼかしながら交代)。
   GLBは `public/models/` に置き、テクスチャは `tools/glb-jpeg.py` で縮めてから使う
+- `model.impostor: 'cross'` はいきもの用。遠景の板を1枚にして常にこちらへ向ける。
+  既定(木用)は十字＋樹冠の水平板で、細い二足歩行に付けると2頭が重なったような形に見えた
+- `model.count` / `spread` で、その場に何頭か散らせる。位置は場所から決まるので毎回同じ
+- リグの無い静止モデルは `blender -b --factory-startup <元.blend> --python tools/export-static.py -- <出力.glb> <三角形の目標> [除外する名前]`
+  で書き出す。頂点カラーの体色はそのまま残る
 
 ## 構成
 

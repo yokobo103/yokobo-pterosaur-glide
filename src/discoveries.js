@@ -109,6 +109,22 @@ export const DISCOVERIES = [
     },
     model: { url: 'models/veg/conifer_lod0.glb', scale: 5, draw: 2600 },    // Astra製GLBはこの形式で足す(原型7.8m -> 39m)
   },
+  {
+    id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340,
+    desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁の開けた場所に数頭が散らばっている。',
+    spawn: {
+      kind: 'cell', cell: 3800, chance: 0.62, salt: 137,
+      pick: (ctx, x, y) => {
+        const t = ctx.terrain;
+        // 林の縁(木はまばら)で、平らで、少し湿った所
+        const gr = t.grove(x, y);
+        return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.12 && gr > 0.3 && gr < 0.55 && t.moisture(x, y) > 0.4;
+      },
+    },
+    cue: { color: 0x7a6a42, radius: 95, strength: 0.6 },                      // 食み跡の薄い土
+    // 原型3.2m。いきもの3.5倍に合わせる。リグが無いので立ち姿のまま(歩かせるにはAstraのリグ待ち)
+    model: { url: 'models/dryo.glb', scale: 3.5, draw: 2400, count: 5, spread: 55, impostor: 'cross' },
+  },
 ];
 
 export const BY_ID = Object.fromEntries(DISCOVERIES.map(d => [d.id, d]));

@@ -292,6 +292,17 @@ window.__slice = {
   foundVisible: () => ui.found.classList.contains('show') ? ui.foundName.textContent : null,
   foundListText: () => ui.foundList.textContent,
   discoveryTris: () => view.discoveries.triangles(),
+  discoveryCounts: () => ({ ...view.discoveries.counts }),
+  kinds: id => view.discoveries.kinds.get(id),   // 検査用: 近景/遠景の描画物をそのまま渡す
+  // 見た目の確認用: 置いた数と、頂点カラーの平均(体色がちゃんと入っているか)
+  discoveryLook: id => {
+    const k = view.discoveries.kinds.get(id);
+    if (!k) return null;
+    const c = k.near.geometry.attributes.color, n = c.count;
+    let r = 0, g = 0, b = 0;
+    for (let i = 0; i < n; i++) { r += c.getX(i); g += c.getY(i); b += c.getZ(i); }
+    return { near: k.near.count, far: k.far.count, tris: k.near.userData.tris, color: [r / n, g / n, b / n] };
+  },
   forceInput: null,
   _view() { return { camHead: view.camHead, dust: view.dust.points, clouds: view.clouds.points,
                      local: (x, y, z) => view.projectLocal(x, y, z),

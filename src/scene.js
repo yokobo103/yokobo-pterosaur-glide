@@ -306,7 +306,7 @@ function addDistanceFade(material, isFar) {
 }
 
 // Astraの木を撮って、遠景の板を作る。画像の左半分=横から、右下=上から
-function bakeImpostor(renderer, geo) {
+function bakeImpostor(renderer, geo, opt = {}) {
   geo.computeBoundingBox();
   const bb = geo.boundingBox;
   const w = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z), h = bb.max.y - bb.min.y;
@@ -338,9 +338,16 @@ function bakeImpostor(renderer, geo) {
   };
   const y0 = bb.min.y, y1 = bb.max.y, r = w / 2;
   quad([-r, y0, 0], [r, y0, 0], [r, y1, 0], [-r, y1, 0], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
-  quad([0, y0, -r], [0, y0, r], [0, y1, r], [0, y1, -r], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
-  const yc = y0 + (y1 - y0) * 0.62;
-  quad([-r, yc, r], [r, yc, r], [r, yc, -r], [-r, yc, -r], [0.5, 0], [1, 0], [1, 0.5], [0.5, 0.5]);
+  // 木は十字に組む。いきものは1枚だけにして、並べるときにこちらへ向ける
+  // (細い二足歩行を十字にすると、2頭が重なったような形に見えた)
+  if (!opt.cross) {
+    quad([0, y0, -r], [0, y0, r], [0, y1, r], [0, y1, -r], [0, 0], [0.5, 0], [0.5, 1], [0, 1]);
+  }
+  // 水平の板は「上から見た樹冠」。いきものに付けると地面に倒れた影のように見えるので、その時は外す
+  if (!opt.cross) {
+    const yc = y0 + (y1 - y0) * 0.62;
+    quad([-r, yc, r], [r, yc, r], [r, yc, -r], [-r, yc, -r], [0.5, 0], [1, 0], [1, 0.5], [0.5, 0.5]);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
@@ -496,7 +503,7 @@ class Flyers {
 // 遠くは木と同じ方式で、モデルを撮った画像を板に貼ったものに入れ替える(1体6三角形)。
 class Discoveries {
   constructor(sites, scene, renderer) {
-    this.sites = sites; this.scene = scene; this.renderer = renderer;
+    this.sites = sites; this.scene = scene; this.renderer = renderer; this.terrain = sites.ctx.terrain;
     this.kinds = new Map();          // typeId -> { near, far, pool }
     this.loading = new Set();
   }
@@ -538,10 +545,16 @@ class Discoveries {
       gltf.scene.traverse(o => {
         if (!o.isMesh) return;
         const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+        // 体色が頂点カラーに入っているモデルがある(Astraの恐竜)。消さずに材質の色と掛け合わせる。
+        // 部品ごとに成分数が違うと結合できないので、必ず3成分に作り直す
+        const src = o.material && o.material.vertexColors ? g.attributes.color : null;
         for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
         const c = (o.material && o.material.color) ? o.material.color.clone().multiplyScalar(1.35) : new THREE.Color(0.35, 0.35, 0.35);
         const n = g.attributes.position.count, col = new Float32Array(n * 3);
-        for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+        for (let i = 0; i < n; i++) {
+          const r = src ? src.getX(i) : 1, gg = src ? src.getY(i) : 1, b = src ? src.getZ(i) : 1;
+          col[i * 3] = c.r * r; col[i * 3 + 1] = c.g * gg; col[i * 3 + 2] = c.b * b;
+        }
         g.setAttribute('color', new THREE.BufferAttribute(col, 3));
         parts.push(g);
       });
@@ -549,13 +562,15 @@ class Discoveries {
       material = new THREE.MeshLambertMaterial({ vertexColors: true });
     }
     addDistanceFade(material, false);
-    const near = new THREE.InstancedMesh(geo, material, 12);
-    near.count = 0; near.frustumCulled = false; near.userData.tris = geo.attributes.position.count / 3;
-    const imp = bakeImpostor(this.renderer, geo);
+    const num = type.model.count || 1;
+    const near = new THREE.InstancedMesh(geo, material, 12 * num);
+    near.count = 0; near.frustumCulled = false;
+    near.userData.tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
+    const imp = bakeImpostor(this.renderer, geo, { cross: type.model.impostor === 'cross' });
     const farMat = new THREE.MeshLambertMaterial({ map: imp.texture, alphaTest: 0.4, side: THREE.DoubleSide });
     addDistanceFade(farMat, true);
-    const far = new THREE.InstancedMesh(imp.geo, farMat, 40);
-    far.count = 0; far.frustumCulled = false; far.userData.tris = 6;
+    const far = new THREE.InstancedMesh(imp.geo, farMat, 40 * num);
+    far.count = 0; far.frustumCulled = false; far.userData.tris = imp.geo.attributes.position.count / 3;
     this.scene.add(near, far);
     this.kinds.set(type.id, { near, far });
     this.loading.delete(type.id);
@@ -573,16 +588,29 @@ class Discoveries {
       if (site.d > (type.model.draw || 2200)) continue;
       if (!this.kinds.has(type.id)) { this.ensure(type); continue; }
       const k = this.kinds.get(type.id);
-      const target = site.d <= 200 ? k.near : k.far;      // 近くは本物、遠くは板(入れ替えは距離でぼかす)
-      const both = site.d > 90 && site.d < 260 ? [k.near, k.far] : [target];
-      q.setFromAxisAngle(up, (site.x * 0.7 + site.y * 0.3) % (Math.PI * 2));
-      p.set(SX * site.x, site.z, site.y);
+      const target = site.d <= FADE_FAR ? k.near : k.far;   // 近くは本物、遠くは板(入れ替えは距離でぼかす)
+      const both = site.d > FADE_NEAR && site.d < FADE_FAR + 60 ? [k.near, k.far] : [target];
       sc.setScalar(type.model.scale || 1);
-      m.compose(p, q, sc);
-      for (const im of both) {
-        if (im.count >= im.instanceMatrix.count) continue;
-        im.setMatrixAt(im.count++, m);
-        counts[type.id] = (counts[type.id] || 0) + 1;
+      // count を書けば、その場に何頭か散らして置く(位置は場所から決まるので毎回同じ)
+      const num = type.model.count || 1, spread = type.model.spread || 0;
+      for (let i = 0; i < num; i++) {
+        let x = site.x, y = site.y, z = site.z;
+        if (i > 0) {
+          const a = (site.x * 0.013 + site.y * 0.007 + i * 2.399) % (Math.PI * 2);
+          const r = spread * (0.35 + 0.65 * ((i * 7 + Math.floor(site.x)) % 5) / 5);
+          x += Math.cos(a) * r; y += Math.sin(a) * r;
+          z = this.terrain.height(x, y);
+        }
+        p.set(SX * x, z, y);
+        for (const im of both) {
+          if (im.count >= im.instanceMatrix.count) continue;
+          // 1枚板の遠景はこちらを向ける。それ以外は場所で決まる向き
+          const face = im === k.far && type.model.impostor === 'cross';
+          q.setFromAxisAngle(up, face ? Math.atan2(SX * px - p.x, py - p.z) : (x * 0.7 + y * 0.3 + i * 1.7) % (Math.PI * 2));
+          m.compose(p, q, sc);
+          im.setMatrixAt(im.count++, m);
+          counts[type.id] = (counts[type.id] || 0) + 1;
+        }
       }
     }
     for (const [, k] of this.kinds) { k.near.instanceMatrix.needsUpdate = true; k.far.instanceMatrix.needsUpdate = true; }
@@ -590,7 +618,7 @@ class Discoveries {
   }
   triangles() {
     let t = 0;
-    for (const [, k] of this.kinds) t += k.near.count * k.near.userData.tris + k.far.count * 6;
+    for (const [, k] of this.kinds) t += k.near.count * k.near.userData.tris + k.far.count * k.far.userData.tris;
     return t;
   }
 }
