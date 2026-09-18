@@ -322,30 +322,56 @@ export const HERD = {
   timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
   active: 1800,       // この距離の群れだけ動かす [m]
   show: 3000,         // この距離の個体だけ描く [m]。1300mだと、近いときは画面の下・映るときは小さい、で見つけられなかった
+  salt: 0,            // 種類ごとに場所をずらす種
+  sample: 'river',    // 置き場所の探し方: 川沿い / 区画のどこでも
+  step: 0.1,          // 向きを変える速さ [rad/s](速いと足が横に滑る)
+  // 開けた平らな所(林の中だと木に隠れて見えなかった)
+  pick: (t, x, y) => t.height(x, y) >= t.water + 1.5 && t.slope(x, y, 25) <= 0.12 && t.grove(x, y) <= 0.42,
+};
+
+// 種類ごとの群れ。新しい恐竜を足すときは、ここに1つ書いて scene.js で Creatures を1つ作るだけ。
+export const SPECIES = {
+  stego: HERD,
+  dryo: {
+    cell: 2600, chance: 0.7, min: 3, max: 6, spread: 45,
+    scale: CREATURE_SCALE,        // 全長3.2m -> 11.2m
+    walk: 0.733,                  // tools/export-dryo.py が作った歩きの、接地中の足の速さ [m/s]
+    timeScale: 1.0,
+    active: 1800, show: 2600, salt: 6151, sample: 'cell', step: 0.22,   // 小型なので向きは速めに変える
+    // 林の縁。平らで、少し湿った所
+    pick: (t, x, y) => {
+      const g = t.grove(x, y);
+      return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.12 && g > 0.28 && g < 0.55 && t.moisture(x, y) > 0.4;
+    },
+  },
 };
 
 export class Herds {
-  constructor(terrain) { this.t = terrain; this.cells = new Map(); }
+  // cfg は SPECIES のどれか。種類ごとに1つ作る
+  constructor(terrain, cfg = HERD) { this.t = terrain; this.cfg = cfg; this.cells = new Map(); }
   herdIn(ci, cj) {
     const key = ci + ',' + cj;
     if (this.cells.has(key)) return this.cells.get(key);
-    const t = this.t, S = HERD.cell;
-    const r = rng(Math.imul(t.seed, 22695477) ^ Math.imul(ci, 1664525) ^ Math.imul(cj, 1013904223));
+    const t = this.t, C = this.cfg, S = C.cell;
+    const r = rng(Math.imul(t.seed, 22695477) ^ Math.imul(ci, 1664525) ^ Math.imul(cj, 1013904223) ^ (C.salt | 0));
     let herd = null;
-    if (r() < HERD.chance) {
-      // 川の近くで、水際から離れた平らな所を探す
+    if (r() < C.chance) {
       for (let k = 0; k < 40 && !herd; k++) {
         const y = (cj + r()) * S;
-        const side = r() < 0.5 ? -1 : 1;
-        const x = t.riverX(y) + side * (140 + 1400 * r());   // 開けた所を見つけやすいよう、川から1.5kmまで探す
-        if (Math.floor(x / S) !== ci) continue;
-        const h = t.height(x, y);
-        if (h < t.water + 1.5 || t.slope(x, y, 25) > 0.12) continue;
-        if (t.grove(x, y) > 0.42) continue;                         // 林の中だと木に隠れて見えなかった。開けた所に置く
-        const n = HERD.min + Math.floor(r() * (HERD.max - HERD.min + 1));
+        let x;
+        if (C.sample === 'river') {
+          // 川の近くで、水際から離れた所を探す(開けた所を見つけやすいよう、川から1.5kmまで)
+          const side = r() < 0.5 ? -1 : 1;
+          x = t.riverX(y) + side * (140 + 1400 * r());
+          if (Math.floor(x / S) !== ci) continue;
+        } else {
+          x = (ci + r()) * S;
+        }
+        if (!C.pick(t, x, y)) continue;
+        const n = C.min + Math.floor(r() * (C.max - C.min + 1));
         const animals = [];
         for (let i = 0; i < n; i++) {
-          const ax = x + (r() * 2 - 1) * HERD.spread, ay = y + (r() * 2 - 1) * HERD.spread;
+          const ax = x + (r() * 2 - 1) * C.spread, ay = y + (r() * 2 - 1) * C.spread;
           animals.push({ id: key + ':' + i, x: ax, y: ay, head: r() * Math.PI * 2, state: 'idle',
                          timer: 1 + r() * 8, tx: ax, ty: ay, s: 0.9 + 0.2 * r(), r: rng(Math.imul(ci + 7, 31) + cj * 977 + i) });
         }
@@ -356,17 +382,17 @@ export class Herds {
     return herd;
   }
   *herdsNear(px, py, rad) {
-    const S = HERD.cell, n = Math.ceil(rad / S) + 1, ci0 = Math.floor(px / S), cj0 = Math.floor(py / S);
+    const S = this.cfg.cell, n = Math.ceil(rad / S) + 1, ci0 = Math.floor(px / S), cj0 = Math.floor(py / S);
     for (let i = ci0 - n; i <= ci0 + n; i++) for (let j = cj0 - n; j <= cj0 + n; j++) {
       const h = this.herdIn(i, j);
-      if (h && Math.hypot(h.cx - px, h.cy - py) <= rad + 2 * HERD.spread) yield h;
+      if (h && Math.hypot(h.cx - px, h.cy - py) <= rad + 2 * this.cfg.spread) yield h;
     }
   }
   update(px, py, dt) {
-    const t = this.t;
+    const t = this.t, C = this.cfg;
     // 大きくすると歩幅も伸びるので、歩く速さも同じ倍率にしないと足が地面を滑る
-    const vOf = a => HERD.walk * HERD.timeScale * HERD.scale * a.s;
-    for (const herd of this.herdsNear(px, py, HERD.active)) {
+    const vOf = a => C.walk * C.timeScale * C.scale * a.s;
+    for (const herd of this.herdsNear(px, py, C.active)) {
       for (const a of herd.animals) {
         a.timer -= dt;
         if (a.timer <= 0) {
@@ -377,7 +403,7 @@ export class Herds {
             let back = toC - a.head;
             while (back > Math.PI) back -= 2 * Math.PI;
             while (back < -Math.PI) back += 2 * Math.PI;
-            const far = Math.hypot(herd.cx - a.x, herd.cy - a.y) > HERD.spread;
+            const far = Math.hypot(herd.cx - a.x, herd.cy - a.y) > C.spread;
             const dir = a.head + (far ? Math.max(-0.7, Math.min(0.7, back)) : (a.r() * 2 - 1) * 0.3);
             const len = 10 + a.r() * 16;
             a.state = 'walk'; a.timer = 6 + a.r() * 14;
@@ -389,7 +415,7 @@ export class Herds {
         let e = want - a.head;
         while (e > Math.PI) e -= 2 * Math.PI;
         while (e < -Math.PI) e += 2 * Math.PI;
-        a.head += Math.max(-0.1 * dt, Math.min(0.1 * dt, e));        // ゆっくり向きを変える(速いと足が横に滑る)
+        a.head += Math.max(-C.step * dt, Math.min(C.step * dt, e));   // ゆっくり向きを変える(速いと足が横に滑る)
         const v = vOf(a);
         const nx = a.x + Math.sin(a.head) * v * dt, ny = a.y + Math.cos(a.head) * v * dt;
         const h = t.height(nx, ny);

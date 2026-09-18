@@ -1,4 +1,4 @@
-import { Terrain, ThermalField, TUNE, WORLDS, HERD } from './world.js';
+import { Terrain, ThermalField, TUNE, WORLDS, HERD, SPECIES } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
 import { View, CAMS, SIZES } from './scene.js';
 import { Vario } from './audio.js';
@@ -43,6 +43,7 @@ const SIZE = q.has('camk') && camk > 0 ? { ...SIZES[SIZE_KEY], cam: camk } : SIZ
 const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 if (!q.has('nodinos')) view.stegos.load(import.meta.env.BASE_URL + 'models/stego.glb').catch(e => console.error('ステゴサウルスの読み込みに失敗', e));   // ?nodinos で無し
+if (!q.has('nodinos')) view.dryos.load(import.meta.env.BASE_URL + 'models/dryo.glb').catch(e => console.error('ドリオサウルスの読み込みに失敗', e));
 if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL, view.renderer).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
 // スタート画面のカメラ選択。選んだものは次回も使う
@@ -212,8 +213,10 @@ window.__slice = {
   modelReady: () => view.modelReady,
   forestReady: () => view.forest.ready,
   stegoReady: () => view.stegos.ready,
+  dryoReady: () => view.dryos.ready,
   herdTune: o => Object.assign(HERD, o),
   herdScale: () => HERD.scale,
+  speciesTune: (kind = 'stego', o) => Object.assign(SPECIES[kind], o || {}),   // 検査用: 種類ごとの設定を見る/変える
   flyersReady: () => view.flyers.ready,
   flyers: () => view.flyers.pool.filter(p => p.bird).map(p => {
     const o = p.model.getObjectByName('Head'), t = p.model.getObjectByName('Tail04');
@@ -226,20 +229,23 @@ window.__slice = {
              inFrame: !!ph && ph[0] > 0 && ph[0] < innerWidth && ph[1] > 0 && ph[1] < innerHeight };
   }),
   // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
-  stegos: () => view.stegos.pool.filter(p => p.animal).map(p => {
+  creatures: (kind = 'stego', bones = ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot']) =>
+    view[kind === 'dryo' ? 'dryos' : 'stegos'].pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };
     const a = p.animal;
-    const head = w('Head'), tail = w('Tail04');
+    const head = w(bones[0]), tail = w(bones[1]);
     // 画面のどこに映っているか(枠の外なら見えていない)
     const ph = head && view.projectWorld(head[0], head[1], head[2]);
     const pt = tail && view.projectWorld(tail[0], tail[1], tail[2]);
     return { id: a.id, state: a.state, x: a.x, y: a.y, head: a.head, ground: terrain.height(a.x, a.y),
-             headBone: head, tailBone: tail, feet: ['ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'].map(w),
+             headBone: head, tailBone: tail, feet: bones.slice(2).map(w),
              dist: Math.hypot(a.x - glider.x, a.y - glider.y),
              px: ph, sizePx: ph && pt ? Math.hypot(ph[0] - pt[0], ph[1] - pt[1]) : 0,
              inFrame: !!ph && ph[0] > 0 && ph[0] < innerWidth && ph[1] > 0 && ph[1] < innerHeight };
   }),
-  herdsNear: (x, y, r) => [...view.stegos.herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
+  stegos: () => window.__slice.creatures('stego'),
+  dryos: () => window.__slice.creatures('dryo', ['Head', 'Tail04', 'LegLFoot', 'LegRFoot']),
+  herdsNear: (x, y, r, kind = 'stego') => [...view[kind === 'dryo' ? 'dryos' : 'stegos'].herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
   trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),

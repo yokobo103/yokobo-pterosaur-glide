@@ -22,7 +22,8 @@ const seededRng = a => () => {
 
 export const SPAWNERS = {
   // すでに世界にいる/あるものに付ける
-  herd: (ctx, px, py, rad) => [...ctx.herds.herdsNear(px, py, rad)].map(h => ({ key: 'herd:' + h.key, x: h.cx, y: h.cy })),
+  herd: (ctx, px, py, rad, opt) => [...ctx.herdsOf[opt.species].herdsNear(px, py, rad)]
+    .map(h => ({ key: `${opt.species}:${h.key}`, x: h.cx, y: h.cy })),
   volcano: (ctx, px, py, rad) => ctx.terrain.volcanoesNear(px, py, rad)
     .map(v => ({ key: `vol:${Math.round(v.x)},${Math.round(v.y)}`, x: v.x, y: v.y })),
   peak: (ctx, px, py, rad) => ctx.terrain.peaksNear ? ctx.terrain.peaksNear(px, py, rad) : [],
@@ -57,7 +58,7 @@ export const DISCOVERIES = [
   {
     id: 'stego_herd', name: 'ステゴサウルスの群れ', rarity: 'よくいる', radius: 380,
     desc: '背板を並べた四足の草食恐竜。開けた川辺で草を食み、ゆっくり歩いている。',
-    spawn: { kind: 'herd' },
+    spawn: { kind: 'herd', species: 'stego' },
     cue: { color: 0x6d5238, radius: 150, strength: 0.85 },       // 踏み荒らされた地面
   },
   {
@@ -111,19 +112,10 @@ export const DISCOVERIES = [
   },
   {
     id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340,
-    desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁の開けた場所に数頭が散らばっている。',
-    spawn: {
-      kind: 'cell', cell: 3800, chance: 0.62, salt: 137,
-      pick: (ctx, x, y) => {
-        const t = ctx.terrain;
-        // 林の縁(木はまばら)で、平らで、少し湿った所
-        const gr = t.grove(x, y);
-        return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.12 && gr > 0.3 && gr < 0.55 && t.moisture(x, y) > 0.4;
-      },
-    },
-    cue: { color: 0x7a6a42, radius: 95, strength: 0.6 },                      // 食み跡の薄い土
-    // 原型3.2m。いきもの3.5倍に合わせる。リグが無いので立ち姿のまま(歩かせるにはAstraのリグ待ち)
-    model: { url: 'models/dryo.glb', scale: 3.5, draw: 2400, count: 5, spread: 55, impostor: 'cross' },
+    desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁を数頭で歩き、時どき立ち止まる。',
+    // 群れは world.js の SPECIES.dryo が世界に配っている。ここでは「発見できる」ことだけを書く
+    spawn: { kind: 'herd', species: 'dryo' },
+    cue: { color: 0x7a6a42, radius: 80, strength: 0.55 },                     // 食み跡の薄い土
   },
 ];
 

@@ -24,7 +24,7 @@ npm run dev     # http://localhost:8141
 - 翼竜は本物のモデル（RH02）、カメラは後ろ約5m。`?size=2|3` は比較用
 - 木と岩はAstraの氾濫原の原型（遠くは代わりの形）。ところどころの高い山は火山。`?notrees` で木なし
 - 強い上昇気流の中を**他の翼竜**が旋回している（回っている所には上がる空気がある）
-- 川の近くの開けた平地にステゴサウルスの群れ（Astraのリグ版、見せる大きさは2.5倍）。`?nodinos` で無し
+- 川の近くの開けた平地に**ステゴサウルスの群れ**、林の縁に**ドリオサウルスの一団**（どちらもAstraのリグ版、3.5倍）。`?nodinos` で無し
 - 着地すると減速して翼を畳み、四足で降りる
 - 既定は丘のある世界。`?world=flat` で起伏なし、`?world=ridge` で尾根の風の試作
 - 右の帯と音が上昇率。芯に近いほど高く速く鳴る
@@ -51,20 +51,21 @@ npm run dev     # http://localhost:8141
 
 ```js
 {
-  id: 'astra_dryosaurus',            // 重複しない名前
-  name: 'ドリオサウルスの群れ',        // 画面に出る名称
-  desc: '二足で走る小型の草食恐竜。…',  // 終わりの一覧に出る説明
+  id: 'astra_something',             // 重複しない名前
+  name: '○○の群れ',                  // 画面に出る名称
+  desc: '…',                         // 終わりの一覧に出る説明
   rarity: 'ときどき',                 // 希少度(表示だけ)
   radius: 320,                       // この距離まで近づくと発見
   spawn: { kind: 'cell', cell: 4200, chance: 0.6, salt: 31,
            pick: (ctx, x, y) => ctx.terrain.moisture(x, y) > 0.5 },   // 出現条件
+           // 歩く恐竜なら { kind: 'herd', species: 'dryo' } にして、群れは world.js の SPECIES に書く
   cue:   { color: 0x6d5238, radius: 120, strength: 0.8 },  // 任意: 地面の色を変えて遠くから気づけるようにする
-  model: { url: 'models/dryo.glb', scale: 3.5, draw: 2400,  // 任意: Astra製GLBはここに置く
+  model: { url: 'models/xxx.glb', scale: 3.5, draw: 2400,   // 任意: 動かないものの見た目(Astra製GLB)
            count: 5, spread: 55, impostor: 'cross' },       // 任意: 何頭を何m四方に散らすか / 遠景の板の作り方
 }
 ```
 
-- `spawn.kind` は `herd`(ステゴの群れに付く) / `volcano` / `peak` / `cell`(条件に合う場所を探す) から選ぶ。
+- `spawn.kind` は `herd`(群れに付ける。`species` で種類を選ぶ) / `volcano` / `peak` / `cell`(条件に合う場所を探す) から選ぶ。
   新しい置き方(バイオーム別・完全ランダムなど)は `SPAWNERS` に足せば、種類側は1行で使える
 - `model` を書かなければ、地形やすでにいるいきものをそのまま発見対象にできる(追加の描画は0)
 - `model` を書くと、近くは本物・遠くは**モデルを撮った画像を貼った板**に自動で入れ替わる(90〜150mでぼかしながら交代)。
@@ -74,6 +75,19 @@ npm run dev     # http://localhost:8141
 - `model.count` / `spread` で、その場に何頭か散らせる。位置は場所から決まるので毎回同じ
 - リグの無い静止モデルは `blender -b --factory-startup <元.blend> --python tools/export-static.py -- <出力.glb> <三角形の目標> [除外する名前]`
   で書き出す。頂点カラーの体色はそのまま残る
+
+## 歩く恐竜を足す
+
+1. **書き出し**: リグ付きblendから `tools/export-dryo.py` の形で書き出す。Astraのリグに歩きが入っていない場合は、
+   足のIK操作骨(`CTRL_Foot.*`)を動かして Idle と Walk をその場で作る。歩きは足踏み(前進はゲーム側)。
+   接地している間に足が後ろへ動く速さ(スクリプトが出す `WALK_SPEED`)を控えておく
+2. **世界**: `src/world.js` の `SPECIES` に1つ足す。`walk` は 1. の `WALK_SPEED`。
+   `walk × timeScale × scale` がそのまま地面を進む速さになる(合っていないと足が滑る)。
+   `pick` で置き場所の条件(高さ・傾き・林の濃さ・湿り気)を書く
+3. **描画**: `src/scene.js` の View で `new Creatures(terrain, this.scene, SPECIES.<名前>)` を1行。
+   モデルの読み込みは `src/main.js` で1行
+4. **発見**: `src/discoveries.js` に `spawn: { kind: 'herd', species: '<名前>' }` で1つ足す
+5. **検査**: `tools/check-dryo.mjs` を写して、足の滑り・接地・向き・発見を測る
 
 ## 構成
 

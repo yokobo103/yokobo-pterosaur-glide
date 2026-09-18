@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { TUNE, VEG, Vegetation, HERD, Herds, FLOCK, Flock } from './world.js';
+import { TUNE, VEG, Vegetation, HERD, SPECIES, Herds, FLOCK, Flock } from './world.js';
 import { DiscoverySites } from './discoveries.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
@@ -623,10 +623,11 @@ class Discoveries {
   }
 }
 
-// ステゴサウルス(Astraのリグ版を tools/export-stego.py で書き出したもの)。近い個体だけ骨つきで描く
-class Stegos {
-  constructor(terrain, scene) {
-    this.t = terrain; this.scene = scene; this.herds = new Herds(terrain);
+// 群れで暮らす恐竜(Astraのリグ版を tools/export-*.py で書き出したもの)。近い個体だけ骨つきで描く。
+// 種類ごとに1つ作る。動きは Idle と Walk の2つのクリップを使う
+class Creatures {
+  constructor(terrain, scene, cfg = HERD) {
+    this.t = terrain; this.scene = scene; this.cfg = cfg; this.herds = new Herds(terrain, cfg);
     this.proto = null; this.clips = null; this.pool = []; this.byId = new Map(); this.ready = false;
 
   }
@@ -644,7 +645,7 @@ class Stegos {
     group.add(model);
     const mixer = new THREE.AnimationMixer(model);
     const idle = mixer.clipAction(this.clips.Idle), walk = mixer.clipAction(this.clips.Walk);
-    walk.timeScale = HERD.timeScale;
+    walk.timeScale = this.cfg.timeScale;
     idle.play();
     this.scene.add(group);
     return { group, model, mixer, idle, walk, animal: null, state: 'idle' };
@@ -652,7 +653,7 @@ class Stegos {
   update(px, py, dt) {
     this.herds.update(px, py, dt);
     if (!this.ready) return;                       // 土ぼこりはモデルの読み込み前から出す
-    const list = this.herds.near(px, py, HERD.show).slice(0, 18);
+    const list = this.herds.near(px, py, this.cfg.show).slice(0, 18);
     const keep = new Set(list.map(e => e.a.id));
     // 見えなくなった個体の器を空ける
     for (const e of this.pool) if (e.animal && !keep.has(e.animal.id)) { this.byId.delete(e.animal.id); e.animal = null; e.group.visible = false; }
@@ -666,7 +667,7 @@ class Stegos {
       e.group.visible = true;
       e.group.position.set(SX * a.x, this.t.height(a.x, a.y), a.y);
       e.group.rotation.set(0, -a.head, 0);
-      e.group.scale.setScalar(a.s * HERD.scale);
+      e.group.scale.setScalar(a.s * this.cfg.scale);
       if (e.state !== a.state) {
         const to = a.state === 'walk' ? e.walk : e.idle, from = a.state === 'walk' ? e.idle : e.walk;
         if (e.state === null) { from.stop(); to.reset().play(); }
@@ -748,9 +749,10 @@ export class View {
     this.scene.add(this.glider);
     this.mixer = null; this.model = null; this.modelReady = false;
     this.forest = new Forest(terrain, this.scene);
-    this.stegos = new Stegos(terrain, this.scene);
+    this.stegos = new Creatures(terrain, this.scene, SPECIES.stego);
+    this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo);
     this.flyers = new Flyers(terrain, field, this.scene);
-    this.sites = new DiscoverySites({ terrain, field, herds: this.stegos.herds });
+    this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds } });
     this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points);
@@ -855,6 +857,7 @@ export class View {
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
     this.stegos.update(g.x, g.y, dt);
+    this.dryos.update(g.x, g.y, dt);
     this.flyers.update(g.x, g.y, dt, g.time);
     this.discoveries.update(g.x, g.y);
     this.dust.update(g.x, g.y, dt, sun);
