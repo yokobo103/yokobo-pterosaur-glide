@@ -8,6 +8,9 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 // シミュレーション側の x(右が正) をそのまま渡すと左右が反転するので、描画のときだけ反転させる。
 const SX = -1;
 
+// 群れのいる地面の踏み荒らし。上空から群れを見つける唯一の手がかり(個体は500m先で18pxしかない)
+export const TRAMPLE = { radius: 150, strength: 0.85 };   // 700mまで近づかないと気づけなかったので広げた
+
 // カメラの型。酔いは人によるので、並べて選ぶ。?cam=a / b / c
 //   roll:    機体の傾きに対してカメラをどれだけ傾けるか(0=地平線は常に水平)
 //   yawTau:  機体の向きにカメラが遅れてついていく時間[秒]
@@ -21,9 +24,9 @@ export const SIZES = {
 };
 
 export const CAMS = {
-  a:   { name: '水平キープ',   back: 120, up: 52, ahead: 360, look: -6,  roll: 0.0,  yawTau: 0.6, fov: 70 },  // 本物の翼竜では up34 だと翼を真横から見て細い線になった
-  b:   { name: '少しだけ傾く', back: 120, up: 52, ahead: 360, look: -6,  roll: 0.1,  yawTau: 0.6, fov: 70 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
-  c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66 },
+  a:   { name: '水平キープ',   back: 120, up: 52, ahead: 360, look: -6,  roll: 0.0,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 本物の翼竜では up34 だと翼を真横から見て細い線になった
+  b:   { name: '少しだけ傾く', back: 120, up: 52, ahead: 360, look: -6,  roll: 0.1,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
+  c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66, lookDrop: 0 },
   // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
   old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
 };
@@ -83,7 +86,7 @@ class Ground {
       // (土ぼこりで示したら上昇気流の柱と見分けがつかなかった)
       for (const hd of herds) {
         const dh = Math.hypot(x - hd.cx, y - hd.cy);
-        if (dh < 95) { c.lerp(trampled, 0.75 * (1 - dh / 95) ** 0.6); break; }
+        if (dh < TRAMPLE.radius) { c.lerp(trampled, TRAMPLE.strength * (1 - dh / TRAMPLE.radius) ** 0.6); break; }
       }
       const grain = 0.92 + 0.18 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)。暗く沈めすぎない
       c.multiplyScalar(grain);
@@ -731,9 +734,11 @@ export class View {
     while (e < -Math.PI) e += 2 * Math.PI;
     this.camHead += e * (1 - Math.exp(-dt / C.yawTau));
     const ch = this.camHead;
+    // 高く飛ぶほど視線を下げ、近くの地面を画面に入れる(高いと足元が画面の下に隠れて、地上の生き物が見えなかった)
+    const drop = Math.min(160, (C.lookDrop || 0) * Math.max(0, g.agl - 60));
     const camZ = P === g ? g.z : P.z + 2;
     this.camera.position.set(SX * (P.x - Math.sin(ch) * C.back * k), camZ + C.up * k, P.y - Math.cos(ch) * C.back * k);
-    this.camera.lookAt(SX * (P.x + Math.sin(ch) * C.ahead), camZ + (C.look + 12 * tall) * k, P.y + Math.cos(ch) * C.ahead);
+    this.camera.lookAt(SX * (P.x + Math.sin(ch) * C.ahead), camZ + (C.look + 12 * tall) * k - drop, P.y + Math.cos(ch) * C.ahead);
     // 右に傾いたらカメラも右に傾く(rotation.z は負が右)。直す前はここの符号が逆だった
     this.camera.rotation.z -= g.bank * C.roll;
     this.renderer.render(this.scene, this.camera);

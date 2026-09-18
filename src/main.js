@@ -1,6 +1,6 @@
 import { Terrain, ThermalField, TUNE, WORLDS, HERD } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
-import { View, CAMS, SIZES } from './scene.js';
+import { View, CAMS, SIZES, TRAMPLE } from './scene.js';
 import { Vario } from './audio.js';
 
 const q = new URLSearchParams(location.search);
@@ -11,8 +11,10 @@ let saved = null;
 try { saved = localStorage.getItem(CAM_STORE); } catch (e) { /* 保存できない環境でも遊べる */ }
 let CAM_KEY = CAMS[q.get('cam')] ? q.get('cam') : (CAMS[saved] && saved !== 'old' ? saved : 'a');
 const camOf = key => {
+  const ld = Number(q.get('lookdrop'));                 // 調整用: ?lookdrop=0 で下向きを切る
   const r = Number(q.get('roll'));                     // 調整用: ?roll=0.2 で傾きの強さだけ上書き
-  return Number.isFinite(r) && q.has('roll') ? { ...CAMS[key], roll: r } : CAMS[key];
+  const base = q.has('lookdrop') && Number.isFinite(ld) ? { ...CAMS[key], lookDrop: ld } : CAMS[key];
+  return Number.isFinite(r) && q.has('roll') ? { ...base, roll: r } : base;
 };
 if (CAM_KEY === 'old') { AIR.bankRate = 1.6; AIR.inputTau = 0; }   // 直す前の再現(比較測定用)
 
@@ -23,6 +25,8 @@ const ui = {
   start: el('start'), go: el('go'),
 };
 
+if (q.has('trample')) TRAMPLE.strength = Number(q.get('trample'));      // 調整用
+if (q.has('trampleR')) TRAMPLE.radius = Number(q.get('trampleR'));
 const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'hills';   // 既定は丘のある世界。?world=flat で起伏なし
 Object.assign(TUNE, WORLDS[WORLD]);
 if (WORLD === 'ridge') {
@@ -159,9 +163,15 @@ window.__slice = {
   stegos: () => view.stegos.pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };
     const a = p.animal;
+    const head = w('Head'), tail = w('Tail04');
+    // 画面のどこに映っているか(枠の外なら見えていない)
+    const ph = head && view.projectWorld(head[0], head[1], head[2]);
+    const pt = tail && view.projectWorld(tail[0], tail[1], tail[2]);
     return { id: a.id, state: a.state, x: a.x, y: a.y, head: a.head, ground: terrain.height(a.x, a.y),
-             headBone: w('Head'), tailBone: w('Tail04'), feet: ['ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'].map(w),
-             dist: Math.hypot(a.x - glider.x, a.y - glider.y) };
+             headBone: head, tailBone: tail, feet: ['ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'].map(w),
+             dist: Math.hypot(a.x - glider.x, a.y - glider.y),
+             px: ph, sizePx: ph && pt ? Math.hypot(ph[0] - pt[0], ph[1] - pt[1]) : 0,
+             inFrame: !!ph && ph[0] > 0 && ph[0] < innerWidth && ph[1] > 0 && ph[1] < innerHeight };
   }),
   herdsNear: (x, y, r) => [...view.stegos.herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
   trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
