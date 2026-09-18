@@ -44,6 +44,8 @@ const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 if (!q.has('nodinos')) view.stegos.load(import.meta.env.BASE_URL + 'models/stego.glb').catch(e => console.error('ステゴサウルスの読み込みに失敗', e));   // ?nodinos で無し
 if (!q.has('nodinos')) view.dryos.load(import.meta.env.BASE_URL + 'models/dryo.glb').catch(e => console.error('ドリオサウルスの読み込みに失敗', e));
+if (q.has('nowater')) view.water.visible = false;          // 調査用: 水の板を消す
+if (q.has('debugground')) setTimeout(() => window.__slice.debugGround(true), 0);   // 調査用: 地面の層を色分け
 if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL, view.renderer).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
 // スタート画面のカメラ選択。選んだものは次回も使う
@@ -251,6 +253,36 @@ window.__slice = {
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),
   bone: name => view.boneInfo(name),
   volcanoes: rad => terrain.volcanoesNear(glider.x, glider.y, rad || 20000).map(v => ({ x: v.x, y: v.y, H: Math.round(v.H), top: Math.round(terrain.height(v.x, v.y)) })),
+  // 検査用: 地面の2層(近景・遠景)の位置と、水面
+  // 検査用: 作り直しにかかった時間の分布(最初の1回は準備も含むので分けて見る)
+  groundTimes: () => {
+    const of = g => {
+      const t = (g.times || []).slice();
+      if (!t.length) return { n: 0 };
+      const first = t[0], rest = t.slice(1).sort((a, b) => a - b);
+      return { n: t.length, 最初: +first.toFixed(1),
+               中央値: +(rest.length ? rest[Math.floor(rest.length / 2)] : first).toFixed(1),
+               最大: +(rest.length ? rest[rest.length - 1] : first).toFixed(1) };
+    };
+    return { 近景: of(view.near), 遠景: of(view.far), 地平: of(view.horizon) };
+  },
+  ground: () => ({
+    near: { cx: view.near.snap[0], cy: view.near.snap[1], half: view.near.size / 2, cell: view.near.cell, ms: view.near.maxMs || 0 },
+    far: { cx: view.far.snap[0], cy: view.far.snap[1], hole: view.near.size / 2 - view.far.cell - view.far.cell, cell: view.far.cell, half: view.far.size / 2, ms: view.far.maxMs || 0 },
+    horizon: { cx: view.horizon.snap[0], cy: view.horizon.snap[1], hole: view.far.size / 2 - view.horizon.cell - view.far.cell, cell: view.horizon.cell, half: view.horizon.size / 2, ms: view.horizon.maxMs || 0 },
+  }),
+  // 調査用: 層ごとに色を変える(?debugground=1 と同じ)
+  debugGround: (on = true) => {
+    view.near.mesh.material.color.set(on ? 0x88ff88 : 0xffffff);
+    view.far.mesh.material.color.set(on ? 0xff8888 : 0xffffff);
+    view.horizon.mesh.material.color.set(on ? 0x8888ff : 0xffffff);
+  },
+  waterVisible: on => { view.water.visible = on; },
+  horizonVisible: on => { view.horizon.mesh.visible = on; },
+  grounds: () => ({ near: view.near, far: view.far, horizon: view.horizon }),
+  pick: (x, y) => view.pick(x, y),
+  waterY: () => terrain.water,
+  _canvas: () => view.renderer.domElement,
   camRoll: () => view.cam.roll,
   begin() { ui.start.classList.add('hidden'); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },

@@ -35,7 +35,7 @@ export const CAMS = {
 class Ground {
   constructor(terrain, size, seg, opts = {}) {
     this.t = terrain; this.size = size; this.seg = seg; this.cell = size / seg;
-    this.inner = opts.inner || 0;             // 内側をくり抜く(高精細メッシュと重ねる)
+    this.coarse = !!opts.coarse;              // 遠くの層。目印の色は付けない(升目が大きすぎて効かない)
     const n = (seg + 1) * (seg + 1);
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(n * 3);
@@ -53,13 +53,20 @@ class Ground {
     this.mesh.frustumCulled = false;
     this.snap = null;
   }
-  update(px, py, marks = []) {
-    const cx = Math.round(px / this.cell) * this.cell, cy = Math.round(py / this.cell) * this.cell;
+  // cx, cy: 全部の層で共通の中心(呼ぶ側で1回だけスナップする。層ごとに別々に丸めると継ぎ目にすき間が空く)
+  // coverHalf: 内側の層が覆う四角の半幅。ここをくり抜く / step: 中心が動く1段の大きさ
+  update(cx, cy, marks = [], coverHalf = 0, step = 0) {
     const herdKey = marks.map(m => Math.round(m.x) + ',' + Math.round(m.y)).join('|');
     if (this.snap && this.snap[0] === cx && this.snap[1] === cy && this.herdKey === herdKey) return false;
+    const t0 = performance.now();
     this.herdKey = herdKey;
     this.snap = [cx, cy];
-    const t = this.t, half = this.size / 2, s = this.seg, hole = this.inner / 2;
+    const t = this.t, half = this.size / 2, s = this.seg;
+    // くり抜きは「1升 + 1段」ぶん内側まで。
+    //   1升: 沈めた頂点に触れる四角形は形が崩れるので、それが内側の層に隠れるように
+    //   1段: この層の作り直しが1コマ遅れても、内側の層との間にすき間が空かないように
+    // (重なった帯では粗い面が上に出ることがあるが、遠景→近景は最大2mで見えない。tools/tmp-poke.mjs で測った)
+    const hole = coverHalf ? coverHalf - this.cell - step : 0;
     // ジュラ紀には草原がない。乾いた所は赤茶の土、湿った所はシダの緑、水辺は泥(黄土色の「草原」に見えていた)
     const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x4f7d38), sand = new THREE.Color(0x7a6448);
     const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
@@ -70,7 +77,7 @@ class Ground {
       const x = cx - half + i * this.cell, y = cy - half + j * this.cell;
       let z = t.height(x, y);
       // 内側は高精細メッシュが描くので、ここは沈めて隠す
-      if (hole && Math.abs(x - cx) < hole && Math.abs(y - cy) < hole) z = -9999;
+      if (hole && Math.abs(x - cx) <= hole && Math.abs(y - cy) <= hole) z = -9999;
       this.pos[k] = SX * x; this.pos[k + 1] = z; this.pos[k + 2] = y;
       const m = t.moisture(x, y);
       // 湿り気は大半が中くらいで、そのまま混ぜるとオリーブ色になって何も変わらなかった。差を強調して振り分ける
@@ -84,7 +91,7 @@ class Ground {
       }
       // 発見対象の目印。上空から「あそこに何かある」と分かるように地面の色を変える
       // (土ぼこりで示したら上昇気流の柱と見分けがつかなかった)
-      for (const mk of marks) {
+      for (const mk of this.coarse ? [] : marks) {
         const dh = Math.hypot(x - mk.x, y - mk.y);
         if (dh < mk.r) { tintColor.set(mk.color); c.lerp(tintColor, mk.strength * (1 - dh / mk.r) ** 0.6); break; }
       }
@@ -106,6 +113,8 @@ class Ground {
       }
     }
     this.geo.attributes.color.needsUpdate = true;
+    this.lastMs = performance.now() - t0;                  // 検査用: 作り直しにかかった時間
+    (this.times = this.times || []).push(this.lastMs);
     return true;
   }
 }
@@ -725,9 +734,13 @@ export class View {
     this.sunLight = new THREE.DirectionalLight(0xffe6c4, 1.5);
     this.sunLight.position.set(-0.4, 1, 0.5);
     this.scene.add(this.sunLight, new THREE.HemisphereLight(0xbcd6ff, 0x5a5340, 1.0));
-    this.far = new Ground(terrain, 13000, 110, { inner: 2600 });
+    // 地面は3層。近景(細かい) / 遠景 / 地平(粗い)。
+    // 地平の層が無いと、遠景が終わる6.5km先から水の板が見えて、まっすぐな川のような線になった
+    this.horizon = new Ground(terrain, 34000, 68, { coarse: true });   // 升目500m。霧でほとんど見えない
+    this.far = new Ground(terrain, 13000, 90);      // 升目144m。110分割(118m)から減らして作り直しを軽くした
+                                                    // (近景に対して面が上に出る量は最大2.8m。1.3km先では見えない)
     this.near = new Ground(terrain, 2600, 72);
-    this.scene.add(this.far.mesh, this.near.mesh);
+    this.scene.add(this.horizon.mesh, this.far.mesh, this.near.mesh);
     const water = new THREE.Mesh(new THREE.PlaneGeometry(30000, 30000),
       new THREE.MeshLambertMaterial({ color: 0x4d7fa8, transparent: true, opacity: 0.85 }));
     water.rotation.x = -Math.PI / 2; water.position.y = terrain.water + 0.6;
@@ -822,6 +835,19 @@ export class View {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
+  // 検査用: 画面のその点に何が映っているか(近景の地面 / 遠景の地面 / 水面 / 何もない)
+  pick(x, y) {
+    this._ray = this._ray || new THREE.Raycaster();
+    // 地面は毎回作り直しているので、当たり判定用の境界を取り直す(古いままだとレイが素通りする)
+    for (const m of [this.near.mesh, this.far.mesh, this.horizon.mesh]) { m.geometry.computeBoundingSphere(); m.geometry.computeBoundingBox(); }
+    const w = this.renderer.domElement.clientWidth || innerWidth, h = this.renderer.domElement.clientHeight || innerHeight;
+    this._ray.setFromCamera(new THREE.Vector2((x / w) * 2 - 1, -(y / h) * 2 + 1), this.camera);
+    const hits = this._ray.intersectObjects([this.near.mesh, this.far.mesh, this.horizon.mesh, this.water], false);
+    if (!hits.length) return { what: 'なし' };
+    const o = hits[0].object;
+    const what = o === this.near.mesh ? '近景' : o === this.far.mesh ? '遠景' : o === this.horizon.mesh ? '地平' : '水面';
+    return { what, dist: hits[0].distance, point: [hits[0].point.x, hits[0].point.y, hits[0].point.z] };
+  }
   // 検査用: 座標を画面のピクセルへ落とす
   projectLocal(x, y, z) { return this._proj(new THREE.Vector3(x, y, z).applyMatrix4(this.glider.matrixWorld)); }
   projectWorld(x, y, z) { return this._proj(new THREE.Vector3(x, y, z)); }
@@ -851,8 +877,16 @@ export class View {
   }
   update(g, dt, sun) {
     const marks = this.sites ? this.sites.tints(g.x, g.y, 9000) : [];
-    this.far.update(g.x, g.y, marks);
-    this.near.update(g.x, g.y, marks);
+    // 全部の層で同じ中心を使う(層ごとに丸めると、くり抜きと近景の四角がずれて、すき間から水面が見えた)
+    const step = this.far.cell;
+    const cx = Math.round(g.x / step) * step, cy = Math.round(g.y / step) * step;
+    // 作り直しは重い(近景6ms・遠景12ms・地平5ms)ので、1コマに1層だけ。
+    // 1段ぶんの遅れなら、くり抜きは1升内側に切ってあるのでちょうど接して隙間は空かない。
+    // それ以上遅れたら順番を待たずに作り直す
+    const late = q => !q.snap || Math.max(Math.abs(q.snap[0] - cx), Math.abs(q.snap[1] - cy)) > step * 1.5;
+    let busy = this.near.update(cx, cy, marks);
+    if (!busy || late(this.far)) busy = this.far.update(cx, cy, marks, this.near.size / 2, step) || busy;
+    if (!busy || late(this.horizon)) this.horizon.update(cx, cy, marks, this.far.size / 2, step);
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
