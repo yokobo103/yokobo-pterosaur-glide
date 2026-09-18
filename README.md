@@ -80,8 +80,10 @@ npm run dev     # http://localhost:8141
 
 1. **書き出し**: リグ付きblendから `tools/export-dryo.py` の形で書き出す。Astraのリグに歩きが入っていない場合は、
    足のIK操作骨(`CTRL_Foot.*`)を動かして Idle と Walk をその場で作る。歩きは足踏み(前進はゲーム側)。
-   接地している間に足が後ろへ動く速さ(スクリプトが出す `WALK_SPEED`)を控えておく
+   接地している間に足が後ろへ動く速さ(スクリプトが出す `WALK_SPEED`)を控えておく。
+   材質の色は頂点カラーへ焼き、部品は1つに結合する(群れにすると描画の回数がそのまま効く)
 2. **世界**: `src/world.js` の `SPECIES` に1つ足す。`walk` は 1. の `WALK_SPEED`。
+   `maxShown` で同時に描く頭数を抑える(1体=描画1回。部品のままだと1体18回になる)。
    `walk × timeScale × scale` がそのまま地面を進む速さになる(合っていないと足が滑る)。
    `pick` で置き場所の条件(高さ・傾き・林の濃さ・湿り気)を書く
 3. **描画**: `src/scene.js` の View で `new Creatures(terrain, this.scene, SPECIES.<名前>)` を1行。

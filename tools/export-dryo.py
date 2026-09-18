@@ -168,6 +168,56 @@ for o in meshes:
             bpy.ops.object.modifier_apply(modifier='decimate')
 print('tris after', sum(tris_of(o) for o in meshes), flush=True)
 
+# ---- 材質の色を頂点カラーへ焼いて、18個の部品を1つにまとめる ----
+# (部品のままだと1体18回描くことになり、18頭で324回。群れにすると効いてくる)
+PALETTE = 'D01_palette'
+def base_color(mat):
+    if mat and mat.use_nodes:
+        for n in mat.node_tree.nodes:
+            if n.type == 'BSDF_PRINCIPLED':
+                inp = n.inputs['Base Color']
+                if inp.is_linked:
+                    return None            # 頂点カラーがつながっている = そのまま使う
+                return tuple(inp.default_value)
+    return (0.5, 0.5, 0.5, 1.0)
+
+flat = bpy.data.materials.new('D01 flat')
+flat.use_nodes = True
+bsdf = next(n for n in flat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+attr = flat.node_tree.nodes.new('ShaderNodeVertexColor'); attr.layer_name = PALETTE
+flat.node_tree.links.new(attr.outputs['Color'], bsdf.inputs['Base Color'])
+bsdf.inputs['Roughness'].default_value = 0.85
+
+for o in meshes:
+    me = o.data
+    if PALETTE not in me.color_attributes:
+        me.color_attributes.new(name=PALETTE, type='FLOAT_COLOR', domain='CORNER')
+    ca = me.color_attributes[PALETTE]
+    me.color_attributes.active_color = ca
+    cols = {i: base_color(sl.material) for i, sl in enumerate(o.material_slots)}
+    for poly in me.polygons:
+        c = cols.get(poly.material_index)
+        if c is None:
+            continue                        # 体はもともとの頂点カラー(赤茶・砂色)を残す
+        for li in poly.loop_indices:
+            ca.data[li].color = c
+    o.data.materials.clear()
+    o.data.materials.append(flat)
+
+join_to = max(meshes, key=tris_of)
+for o in scn.objects:
+    o.select_set(False)
+for o in meshes:
+    o.select_set(True)
+scn.view_layers[0].objects.active = join_to
+with bpy.context.temp_override(scene=scn, view_layer=scn.view_layers[0], active_object=join_to,
+                               object=join_to, selected_objects=meshes, selected_editable_objects=meshes):
+    bpy.ops.object.join()
+meshes = [join_to]
+if not any(m.type == 'ARMATURE' for m in join_to.modifiers):
+    md = join_to.modifiers.new('Armature', 'ARMATURE'); md.object = arm
+print('joined into', join_to.name, tris_of(join_to), 'tris /', len(join_to.data.materials), 'material', flush=True)
+
 for o in scn.objects:
     o.select_set(False)
 arm.select_set(True)

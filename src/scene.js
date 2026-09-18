@@ -653,7 +653,7 @@ class Creatures {
   update(px, py, dt) {
     this.herds.update(px, py, dt);
     if (!this.ready) return;                       // 土ぼこりはモデルの読み込み前から出す
-    const list = this.herds.near(px, py, this.cfg.show).slice(0, 18);
+    const list = this.herds.near(px, py, this.cfg.show).slice(0, this.cfg.maxShown || 18);
     const keep = new Set(list.map(e => e.a.id));
     // 見えなくなった個体の器を空ける
     for (const e of this.pool) if (e.animal && !keep.has(e.animal.id)) { this.byId.delete(e.animal.id); e.animal = null; e.group.visible = false; }

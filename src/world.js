@@ -322,6 +322,7 @@ export const HERD = {
   timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
   active: 1800,       // この距離の群れだけ動かす [m]
   show: 3000,         // この距離の個体だけ描く [m]。1300mだと、近いときは画面の下・映るときは小さい、で見つけられなかった
+  maxShown: 18,       // 同時に描く頭数の上限(1体で描画1回)
   salt: 0,            // 種類ごとに場所をずらす種
   sample: 'river',    // 置き場所の探し方: 川沿い / 区画のどこでも
   step: 0.1,          // 向きを変える速さ [rad/s](速いと足が横に滑る)
@@ -337,7 +338,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,        // 全長3.2m -> 11.2m
     walk: 0.733,                  // tools/export-dryo.py が作った歩きの、接地中の足の速さ [m/s]
     timeScale: 1.0,
-    active: 1800, show: 2600, salt: 6151, sample: 'cell', step: 0.22,   // 小型なので向きは速めに変える
+    active: 1800, show: 2000, maxShown: 12, salt: 6151, sample: 'cell', step: 0.22,   // 小型なので向きは速めに変える
     // 林の縁。平らで、少し湿った所
     pick: (t, x, y) => {
       const g = t.grove(x, y);
