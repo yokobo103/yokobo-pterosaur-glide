@@ -117,6 +117,24 @@ export const DISCOVERIES = [
     spawn: { kind: 'herd', species: 'dryo' },
     cue: { color: 0x7a6a42, radius: 80, strength: 0.55 },                     // 食み跡の薄い土
   },
+  {
+    id: 'tricera_herd', name: 'トリケラトプスの群れ', rarity: 'ときどき', radius: 420,
+    desc: '三本の角と大きな襟飾りを持つ四足の草食恐竜。乾いた開けた台地を、隊列のように並んで歩く。',
+    spawn: { kind: 'herd', species: 'tricera' },
+    cue: { color: 0x8a6b45, radius: 130, strength: 0.7 },                     // 踏み荒らされた乾いた土
+  },
+  {
+    id: 'brachio_group', name: 'ブラキオサウルス', rarity: 'まれ', radius: 900,
+    desc: '首を高く上げた巨大な四足の草食恐竜。全長69m・高さ42m。川沿いの低地をゆっくり歩き、遠くからでも見つかる。',
+    spawn: { kind: 'herd', species: 'brachio' },
+    cue: { color: 0x6f6244, radius: 190, strength: 0.6 },
+  },
+  {
+    id: 'allo', name: 'アロサウルス', rarity: 'まれ', radius: 380,
+    desc: '大きな頭と鋭い歯を持つ二足の捕食者。単独か二頭で、草食の群れから少し離れた開けた所を歩いている。',
+    spawn: { kind: 'herd', species: 'allo' },
+    cue: { color: 0x5f5138, radius: 70, strength: 0.65 },
+  },
 ];
 
 export const BY_ID = Object.fromEntries(DISCOVERIES.map(d => [d.id, d]));

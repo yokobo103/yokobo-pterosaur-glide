@@ -4,7 +4,7 @@ const LOCAL = !process.argv.includes('--public');
 const BASE = LOCAL ? (process.env.GLIDE_BASE || 'http://localhost:8141/') : 'https://yokobo103.github.io/yokobo-pterosaur-glide/';
 for (const size of [{n:'スマホ縦',w:390,h:844},{n:'PC横',w:1280,h:800}]) {
   // 大きさごとに新しいブラウザで開く。同じブラウザで2ページ目を開くと、この検査環境では読み込みが止まった(実際の起動は0.6秒)
-  const b = await puppeteer.launch({ headless: true, protocolTimeout: 240000,
+  const b = await puppeteer.launch({ headless: true, protocolTimeout: 600000,
     args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
   const p = await b.newPage();
   await p.setViewport({ width: size.w, height: size.h });

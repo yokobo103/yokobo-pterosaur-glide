@@ -358,6 +358,35 @@ export const SPECIES = {
       return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.12 && g > 0.28 && g < 0.55 && t.moisture(x, y) > 0.4;
     },
   },
+  // 全長8.0m -> 28m。開けた乾いた台地に群れる
+  tricera: {
+    cell: 3400, chance: 0.6, min: 4, max: 7, spread: 80,
+    scale: CREATURE_SCALE,
+    walk: 0.643,                  // tools/export-walker.py の WALK_SPEED
+    timeScale: 1.0,
+    active: 1800, show: 2600, maxShown: 12, salt: 30113, sample: 'cell', step: 0.13,
+    pick: (t, x, y) => t.height(x, y) > t.water + 6 && t.slope(x, y, 30) < 0.10
+                    && t.moisture(x, y) < 0.38 && t.grove(x, y) < 0.42,
+  },
+  // 全長19.6m・高さ12.1m -> 69m・42m。川沿いの低地を2〜4頭で歩く。遠くからでも分かる
+  brachio: {
+    cell: 5200, chance: 0.5, min: 2, max: 4, spread: 130,
+    scale: CREATURE_SCALE,
+    walk: 1.0,
+    timeScale: 1.0,
+    active: 2600, show: 4200, maxShown: 6, salt: 77191, sample: 'river', step: 0.07,
+    pick: (t, x, y) => t.height(x, y) > t.water + 2 && t.slope(x, y, 40) < 0.08 && t.moisture(x, y) > 0.42,
+  },
+  // 全長8.3m -> 29m。単独か2頭。草食の群れから少し離れた開けた所にいる
+  allo: {
+    cell: 4600, chance: 0.45, min: 1, max: 2, spread: 60,
+    scale: CREATURE_SCALE,
+    walk: 1.2,
+    timeScale: 1.0,
+    active: 1800, show: 2600, maxShown: 4, salt: 51977, sample: 'cell', step: 0.2,
+    pick: (t, x, y) => t.height(x, y) > t.water + 4 && t.slope(x, y, 30) < 0.14
+                    && t.moisture(x, y) < 0.5 && t.grove(x, y) < 0.5,
+  },
 };
 
 export class Herds {

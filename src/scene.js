@@ -882,8 +882,12 @@ export class View {
     this.forest = new Forest(terrain, this.scene);
     this.stegos = new Creatures(terrain, this.scene, SPECIES.stego, 'ステゴ');
     this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo, 'ドリオ');
+    this.triceras = new Creatures(terrain, this.scene, SPECIES.tricera, 'トリケラ');
+    this.brachios = new Creatures(terrain, this.scene, SPECIES.brachio, 'ブラキオ');
+    this.allos = new Creatures(terrain, this.scene, SPECIES.allo, 'アロ');
     this.flyers = new Flyers(terrain, field, this.scene);
-    this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds } });
+    this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds,
+      tricera: this.triceras.herds, brachio: this.brachios.herds, allo: this.allos.herds } });
     this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points); this.plumes.points.userData.part = '噴煙';
@@ -1010,6 +1014,9 @@ export class View {
     this.plumes.update(g.x, g.y, dt);
     this.stegos.update(g.x, g.y, dt);
     this.dryos.update(g.x, g.y, dt);
+    this.triceras.update(g.x, g.y, dt);
+    this.brachios.update(g.x, g.y, dt);
+    this.allos.update(g.x, g.y, dt);
     this.flyers.update(g.x, g.y, dt, g.time);
     this.discoveries.update(g.x, g.y);
     this.dust.update(g.x, g.y, dt, sun);
