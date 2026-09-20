@@ -29,7 +29,8 @@ if (!PUBLIC) {
 console.log('検査の対象:', base);
 
 const CHECKS = [
-  ['左右の向き(水平キープ)', 'check-signs.mjs', ['--cam=a']],
+
+  ['低空の居心地',           'check-lowfly.mjs', []],  ['左右の向き(水平キープ)', 'check-signs.mjs', ['--cam=a']],
   ['左右の向き(少し傾く)',   'check-signs.mjs', ['--cam=b']],
   ['本物の翼竜の向き',       'check-model.mjs', []],
   ['画面から出ない',         'check-frame.mjs', []],
@@ -51,7 +52,7 @@ for (const [name, file, args] of CHECKS) {
     const c = spawn(process.execPath, [path.join(ROOT, 'tools', file), ...args], { env: { ...process.env, GLIDE_BASE: base } });
     let out = '';
     c.stdout.on('data', d => out += d); c.stderr.on('data', d => out += d);
-    const timer = setTimeout(() => c.kill(), 600000);
+    const timer = setTimeout(() => c.kill(), 900000);
     c.on('close', status => { clearTimeout(timer); resolve({ status, out }); });
   });
   const out = r.out;

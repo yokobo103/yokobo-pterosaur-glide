@@ -157,6 +157,10 @@ export class Terrain {
 }
 
 export const TUNE = {
+  warmK: 8,           // 地面近くの暖まった空気の強さ [m/s](0で無効)。低く飛ぶほど沈みにくい
+  warmH: 45,          // 高さ方向の効き幅 [m]。小さいほど「低空だけ」に効く
+  warmCap: 3.0,       // 上限 [m/s]
+  slopeK: 14,         // 斜面を這い上がる分の強さ
   moistHollow: 0.30,  // 谷が湿り尾根が乾く度合い。0だと地形と植生が無関係になり、上空から起伏が読めない
   spacing: 900,       // 上昇風の間隔 [m]
   jitter: 320,
@@ -239,7 +243,30 @@ export class ThermalField {
       if (v > best) best = v;
     }
     if (best < 0) best = Math.max(best, -TUNE.ambient * 2.2);
-    return (best === -1e9 ? 0 : best) * sun - TUNE.ambient + this.ridgeAt(x, y, z, sun);
+    return (best === -1e9 ? 0 : best) * sun - TUNE.ambient + this.ridgeAt(x, y, z, sun) + this.slopeLift(x, y, z, sun);
+  }
+  // 地面の近くの、暖まった空気の層。乾いて開けた地面ほど厚く、日が暮れると消える。
+  // 地面から離れるほど弱まるので「低く飛ぶ」こと自体が高度を伸ばす手になる。
+  // 斜面を這い上がる分(日の当たる面ほど強い)も足す。風は要らない(尾根の上昇風とは別もの)。
+  slopeLift(x, y, z, sun = 1) {
+    if (TUNE.warmK <= 0) return 0;
+    const t = this.t;
+    const agl = Math.max(0, z - t.height(x, y));
+    if (agl > TUNE.warmH * 3.5) return 0;                 // 高い所では効かない
+    const dry = 1 - t.moisture(x, y);
+    const open = 1 - t.grove(x, y);
+    const decay = Math.exp(-agl / TUNE.warmH);
+    let v = TUNE.warmK * dry * (0.45 + 0.55 * open) * sun * decay;
+    if (TUNE.slopeK > 0) {
+      const e = 45;
+      const gx = (t.height(x + e, y) - t.height(x - e, y)) / (2 * e);
+      const gy = (t.height(x, y + e) - t.height(x, y - e)) / (2 * e);
+      const g = Math.hypot(gx, gy);
+      // 太陽は +Y の方角の低い空にある。その側を向いた斜面(+Yへ下る面)ほど暖まる
+      const faceSun = 0.55 + 0.45 * Math.max(0, -gy / (g || 1));
+      v += TUNE.slopeK * g * dry * faceSun * sun * decay;
+    }
+    return Math.min(TUNE.warmCap, v);
   }
   // 尾根の上昇風: 風が斜面を登る向きに当たれば上がり、風下側では下がる。
   // 日が暮れると風も弱まる(尾根だけで永遠に飛べないように)
