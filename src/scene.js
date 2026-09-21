@@ -162,8 +162,12 @@ class Ground {
     // (重なった帯では粗い面が上に出ることがあるが、遠景→近景は最大2mで見えない。tools/tmp-poke.mjs で測った)
     const hole = coverHalf ? coverHalf - this.cell - step : 0;
     // ジュラ紀には草原がない。乾いた所は赤茶の土、湿った所はシダの緑、水辺は泥(黄土色の「草原」に見えていた)
-    const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x4f7d38), sand = new THREE.Color(0x7a6448);
-    const canopyDry = new THREE.Color(0x22381f), canopyWet = new THREE.Color(0x3a5524);
+    // 地域が見分けられるように色を離す(測ったら 林↔川沿い が 0.10 しか違わなかった)。
+    //   乾いた台地=赤茶 / 川沿い=明るい黄緑 / 林=冷たい暗緑 / 岩場=灰
+    const dry = new THREE.Color(0xb0764a), wet = new THREE.Color(0x5f8f3c), sand = new THREE.Color(0x7a6448);
+    const lush = new THREE.Color(0x7aa848);                 // 水際のいちばん茂った所
+    const canopyDry = new THREE.Color(0x1d3124), canopyWet = new THREE.Color(0x2b4832);
+    const rock = new THREE.Color(0x6e6b62);
     const tintColor = new THREE.Color();
     const c = new THREE.Color();
     // 1周目: 高さだけ入れる。傾きと谷らしさは、隣の頂点から出せば高さを引き直さずに済む
@@ -191,6 +195,7 @@ class Ground {
       // 湿り気は大半が中くらいで、そのまま混ぜるとオリーブ色になって何も変わらなかった。差を強調して振り分ける
       const mm = Math.min(1, Math.max(0, (m - 0.3) / 0.3));
       c.copy(dry).lerp(wet, mm * mm * (3 - 2 * mm));
+      if (m > 0.55) c.lerp(lush, Math.min(1, (m - 0.55) / 0.25) * 0.55);      // 水際は明るい黄緑
       // 林の下は樹冠の色。上空からは1本1本より、この色のかたまりで林と読める
       const gv = t.grove(x, y);
       if (gv > 0.47 && z > t.water + 2) {
@@ -203,6 +208,8 @@ class Ground {
         const dh = Math.hypot(x - mk.x, y - mk.y);
         if (dh < mk.r) { tintColor.set(mk.color); c.lerp(tintColor, mk.strength * (1 - dh / mk.r) ** 0.6); break; }
       }
+      // 傾きのある所は岩が出る。灰色にして「岩場」を乾いた台地と区別する
+      if (slope01 > 0.34) c.lerp(rock, Math.min(1, (slope01 - 0.34) / 0.4) * 0.7);
       const grain = 0.92 + 0.18 * t.grain(x, y);   // 近景の手がかり(速度と向きが読める)。暗く沈めすぎない
       c.multiplyScalar(grain);
       if (z < t.water + 1.2) c.lerp(sand, 0.8);
@@ -256,6 +263,72 @@ const DUST_FRAG = [
   '  gl_FragColor = vec4(uColor, vA * uFade * (1.0 - d * 2.0) * 0.85);',
   '}',
 ].join('\n');
+
+// 地面すれすれの空気の動き。乾いて開けた地面の上だけ、砂粒がゆっくり舞う。
+// 上昇気流の柱(高く伸びる濃い土ぼこり)とは別物で、低い・まばら・自分のまわりだけ。
+// 「低く飛ぶほど沈みにくい」を、数字を出さずに目で分かるようにするためのもの。
+const SHIMMER_VERT = [
+  'attribute float aAlpha;',
+  'varying float vA;',
+  'uniform float uSize;',
+  'uniform float uMax;',
+  'void main(){',
+  '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+  '  float dist = -mv.z;',
+  '  vA = aAlpha * clamp((dist - 8.0) / 22.0, 0.0, 1.0) * (1.0 - smoothstep(260.0, 420.0, dist));',
+  '  gl_PointSize = clamp(uSize * (260.0 / max(dist, 1.0)), 1.5, uMax);',
+  '  gl_Position = projectionMatrix * mv;',
+  '}',
+].join('\n');
+
+class Shimmer {
+  constructor(terrain, n = 700) {
+    this.t = terrain; this.n = n;
+    const g = new THREE.BufferGeometry();
+    this.pos = new Float32Array(n * 3);
+    this.alpha = new Float32Array(n);
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    g.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1));
+    this.geo = g;
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { uSize: { value: 4.2 }, uMax: { value: 6.0 }, uColor: { value: new THREE.Color(0xdccba0) }, uFade: { value: 1 } },
+      vertexShader: SHIMMER_VERT, fragmentShader: DUST_FRAG, transparent: true, depthWrite: false,
+    });
+    this.points = new THREE.Points(g, this.mat);
+    this.points.frustumCulled = false;
+    this.points.userData.part = '地表の空気';
+    this.parts = [];
+  }
+  update(px, py, pz, dt, sun, head = 0) {
+    const t = this.t, ground = t.height(px, py), agl = pz - ground;
+    // 高い所では出さない(低空でだけ見える手がかりにする)
+    // 高さで急に消す。低空にいるときだけの手がかりにする
+    const near = Math.max(0, 1 - agl / 90) ** 1.5 * sun;
+    this.mat.uniforms.uFade.value = near * 5.5;   // 1粒が小さいので、この程度でやっと「よく見ると分かる」
+    if (near <= 0.02) { this.geo.setDrawRange(0, 0); return; }
+    this.geo.setDrawRange(0, this.n);
+    for (let i = 0; i < this.n; i++) {
+      let p = this.parts[i];
+      if (!p || Math.hypot(p.x - px, p.y - py) > 230) {
+        // 進む先に撒く。後ろに撒いても見えないし、前に撒くと「飛び込んでいく」感じになる
+        const a = head + (Math.random() - 0.5) * 2.0, r = 35 + Math.random() * 185;
+        const x = px + Math.sin(a) * r, y = py + Math.cos(a) * r;
+        const dry = 1 - t.moisture(x, y), open = 1 - t.grove(x, y);
+        const q = Math.min(1, Math.max(0, (dry - 0.45) / 0.45) * 1.8) * (0.3 + 0.7 * open);   // 暖まった空気の強さと同じ条件
+        p = this.parts[i] = { x, y, z: t.height(x, y) + Math.random() * 10, v: 0.5 + 1.6 * dry, a: q };
+      }
+      p.z += p.v * dt * (0.6 + 0.4 * Math.sin((p.x + p.y) * 0.01));
+      p.x += dt * 1.2 * Math.sin(p.y * 0.02);
+      const h = t.height(p.x, p.y);
+      if (p.z - h > 40) p.z = h;                       // 低い層の中だけを回る
+      const k = i * 3;
+      this.pos[k] = SX * p.x; this.pos[k + 1] = p.z; this.pos[k + 2] = p.y;
+      this.alpha[i] = p.a * (1 - (p.z - h) / 40);
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.aAlpha.needsUpdate = true;
+  }
+}
 
 // 上昇気流は「舞い上がる土ぼこりの柱」としてだけ見せる。数字も矢印も出さない。
 class Dust {
@@ -575,12 +648,47 @@ class Forest {
 
 // 他の翼竜。自分と同じモデルを使い回す(追加の読み込みなし)
 class Flyers {
-  constructor(terrain, field, scene) {
-    this.flock = new Flock(terrain, field); this.scene = scene;
+  constructor(terrain, field, scene, renderer = null) {
+    this.flock = new Flock(terrain, field); this.scene = scene; this.renderer = renderer;
     this.proto = null; this.clip = null; this.pool = []; this.byId = new Map(); this.ready = false;
+    this.far = null;
   }
   setModel(gltfScene, clips) {
     this.proto = gltfScene; this.clip = clips.Glide_Loop; this.ready = true;
+    // 遠景の板づくりに失敗しても、飛ぶことに影響させない
+    try { this.buildFar(gltfScene); } catch (e) { console.warn('遠くの翼竜の板を作れなかった', e); }
+  }
+  // 遠くで旋回している翼竜は1枚板にする。空を背に回っているので、遠くの上昇気流の目印になる。
+  // (本物のモデルは1体9回描くので、遠くまで本物で出すと描画回数が跳ね上がる)
+  buildFar(gltfScene) {
+    if (!this.renderer || !FLOCK.farShow) return;
+    const parts = [];
+    gltfScene.updateMatrixWorld(true);
+    gltfScene.traverse(o => {
+      if (!o.isMesh) return;
+      const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+      g.morphAttributes = {}; g.morphTargetsRelative = false;   // 表情などのモーフがあると結合できない
+      const c = (o.material && o.material.color) ? o.material.color.clone() : new THREE.Color(0.4, 0.32, 0.26);
+      const n = g.attributes.position.count, col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      parts.push(g);
+    });
+    if (!parts.length) return;
+    const geo = mergeGeometries(parts, false);
+    if (!geo) return;
+    // 上から見た形(翼を広げた姿)を撮る。旋回しているので、この向きがいちばんそれらしい
+    const imp = bakeImpostor(this.renderer, geo, { cross: true });
+    imp.texture.generateMipmaps = false;
+    imp.texture.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshLambertMaterial({ map: imp.texture, alphaTest: 0.12, side: THREE.DoubleSide });
+    imp.geo.computeBoundingBox();
+    this.farH = imp.geo.boundingBox.max.y - imp.geo.boundingBox.min.y;
+    const far = new THREE.InstancedMesh(imp.geo, mat, FLOCK.farMax);
+    far.count = 0; far.frustumCulled = false; far.userData.part = '他の翼竜';
+    this.scene.add(far);
+    this.far = far;
   }
   make() {
     const group = new THREE.Group();
@@ -600,7 +708,25 @@ class Flyers {
   }
   update(px, py, dt, time) {
     if (!this.ready) return;
-    const list = this.flock.near(px, py, time);
+    const all = this.flock.near(px, py, time);
+    const list = all.filter(b => b.d <= FLOCK.show);
+    if (this.far) {
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+      const up = new THREE.Vector3(0, 1, 0);
+      let n = 0;
+      for (const b of all) {
+        if (b.d <= FLOCK.show * 0.9 || n >= this.far.instanceMatrix.count) continue;
+        p.set(SX * b.x, b.z, b.y);
+        q.setFromAxisAngle(up, Math.atan2(SX * px - p.x, py - p.z));
+        let k = FLOCK.scale;
+        if (this.mpp > 0 && this.farH > 0) k = Math.max(k, (FLOCK.farMinPx || 5) * this.mpp * b.d / this.farH);
+        sc.setScalar(k);
+        m.compose(p, q, sc);
+        this.far.setMatrixAt(n++, m);
+      }
+      this.far.count = n;
+      this.far.instanceMatrix.needsUpdate = true;
+    }
     const keep = new Set(list.map(b => b.id));
     for (const e of this.pool) if (e.bird && !keep.has(e.bird.id)) { this.byId.delete(e.bird.id); e.bird = null; e.group.visible = false; }
     for (const b of list) {
@@ -748,17 +874,64 @@ class Discoveries {
 // 群れで暮らす恐竜(Astraのリグ版を tools/export-*.py で書き出したもの)。近い個体だけ骨つきで描く。
 // 種類ごとに1つ作る。動きは Idle と Walk の2つのクリップを使う
 class Creatures {
-  constructor(terrain, scene, cfg = HERD, part = 'いきもの') {
+  constructor(terrain, scene, cfg = HERD, part = 'いきもの', renderer = null) {
     this.t = terrain; this.scene = scene; this.cfg = cfg; this.part = part; this.herds = new Herds(terrain, cfg);
     this.proto = null; this.clips = null; this.pool = []; this.byId = new Map(); this.ready = false;
-
+    this.renderer = renderer; this.far = null; this.lastFar = null;
   }
   async load(url) {
     const gltf = await new GLTFLoader().loadAsync(url);
     this.proto = gltf.scene;
     this.proto.traverse(o => { if (o.isMesh) { o.frustumCulled = false; } });
     this.clips = Object.fromEntries(gltf.animations.map(c => [c.name, c]));
+    try { this.buildFar(); } catch (e) { console.warn('遠くの板を作れなかった', this.part, e); }
     this.ready = true;
+  }
+  // 遠くの個体は、モデルを撮った画像を貼った1枚板にする。
+  // 種類ごとに描画1回・1体2三角形なので、数kmの向こうまで「何かいる」が見える。
+  buildFar() {
+    if (!this.renderer || !this.cfg.farShow) return;
+    let geo = null;
+    this.proto.traverse(o => { if (!geo && o.isMesh && o.geometry.attributes.color) geo = o.geometry; });
+    if (!geo) return;
+    const imp = bakeImpostor(this.renderer, geo, { cross: true });
+    imp.texture.generateMipmaps = false;                  // 縮めたときにアルファが薄まって消えるのを防ぐ
+    imp.texture.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshLambertMaterial({ map: imp.texture, alphaTest: 0.12, side: THREE.DoubleSide });
+    const far = new THREE.InstancedMesh(imp.geo, mat, this.cfg.farMax || 90);
+    far.count = 0; far.frustumCulled = false;
+    far.userData.part = this.part;
+    imp.geo.computeBoundingBox();
+    this.farH = imp.geo.boundingBox.max.y - imp.geo.boundingBox.min.y;   // 板の高さ(モデルの単位)
+    this.scene.add(far);
+    this.far = far;
+  }
+  // 遠くの板を並べ直す(毎コマやるほどのことではない。60m動いたときだけ)
+  // mpp: 1m先の1画素が何メートルか(カメラの画角と画面の高さで決まる)
+  updateFar(px, py, mpp = 0) {
+    if (!this.far) return;
+    if (this.lastFar && Math.hypot(px - this.lastFar[0], py - this.lastFar[1]) < 60) return;
+    this.lastFar = [px, py];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    const near = this.cfg.show * 0.9;
+    let n = 0;
+    for (const { a, d } of this.herds.near(px, py, this.cfg.farShow)) {
+      if (d < near || n >= this.far.instanceMatrix.count) continue;
+      p.set(SX * a.x, this.t.height(a.x, a.y), a.y);
+      q.setFromAxisAngle(up, Math.atan2(SX * px - p.x, py - p.z));   // 板はこちらを向ける
+      // 遠くでも数画素は残す。1画素を切ると「何かいる」に気づけない
+      let k = a.s * this.cfg.scale;
+      if (mpp > 0 && this.farH > 0) {
+        const want = (this.cfg.farMinPx || 4) * mpp * d;              // この距離で必要な高さ [m]
+        k = Math.max(k, want / this.farH);
+      }
+      sc.setScalar(k);
+      m.compose(p, q, sc);
+      this.far.setMatrixAt(n++, m);
+    }
+    this.far.count = n;
+    this.far.instanceMatrix.needsUpdate = true;
   }
   make() {
     const group = new THREE.Group();
@@ -776,6 +949,7 @@ class Creatures {
   update(px, py, dt) {
     this.herds.update(px, py, dt);
     if (!this.ready) return;                       // 土ぼこりはモデルの読み込み前から出す
+    this.updateFar(px, py, this.mpp || 0);
     const list = this.herds.near(px, py, this.cfg.show).slice(0, this.cfg.maxShown || 18);
     const keep = new Set(list.map(e => e.a.id));
     // 見えなくなった個体の器を空ける
@@ -868,6 +1042,8 @@ export class View {
     this.sunDisc.renderOrder = -1;
     this.scene.add(this.sunDisc);
     this.dust = new Dust(field);
+    this.shimmer = new Shimmer(terrain);
+    this.scene.add(this.shimmer.points);
     this.clouds = new Clouds(field);
     this.scene.add(this.dust.points, this.clouds.points);
     this.dust.points.userData.part = '土ぼこり'; this.clouds.points.userData.part = '雲';
@@ -880,12 +1056,12 @@ export class View {
     this.scene.add(this.glider);
     this.mixer = null; this.model = null; this.modelReady = false;
     this.forest = new Forest(terrain, this.scene);
-    this.stegos = new Creatures(terrain, this.scene, SPECIES.stego, 'ステゴ');
-    this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo, 'ドリオ');
-    this.triceras = new Creatures(terrain, this.scene, SPECIES.tricera, 'トリケラ');
-    this.brachios = new Creatures(terrain, this.scene, SPECIES.brachio, 'ブラキオ');
-    this.allos = new Creatures(terrain, this.scene, SPECIES.allo, 'アロ');
-    this.flyers = new Flyers(terrain, field, this.scene);
+    this.stegos = new Creatures(terrain, this.scene, SPECIES.stego, 'ステゴ', this.renderer);
+    this.dryos = new Creatures(terrain, this.scene, SPECIES.dryo, 'ドリオ', this.renderer);
+    this.triceras = new Creatures(terrain, this.scene, SPECIES.tricera, 'トリケラ', this.renderer);
+    this.brachios = new Creatures(terrain, this.scene, SPECIES.brachio, 'ブラキオ', this.renderer);
+    this.allos = new Creatures(terrain, this.scene, SPECIES.allo, 'アロ', this.renderer);
+    this.flyers = new Flyers(terrain, field, this.scene, this.renderer);
     this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds,
       tricera: this.triceras.herds, brachio: this.brachios.herds, allo: this.allos.herds } });
     this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
@@ -1012,6 +1188,10 @@ export class View {
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
+    // 1m先の1画素が何メートルか。遠くの板の最低の大きさに使う
+    const h = this.renderer.domElement.height || 844;
+    const mpp = 2 * Math.tan(this.camera.fov * Math.PI / 360) / h;
+    for (const c of [this.stegos, this.dryos, this.triceras, this.brachios, this.allos, this.flyers]) c.mpp = mpp;
     this.stegos.update(g.x, g.y, dt);
     this.dryos.update(g.x, g.y, dt);
     this.triceras.update(g.x, g.y, dt);
@@ -1020,6 +1200,7 @@ export class View {
     this.flyers.update(g.x, g.y, dt, g.time);
     this.discoveries.update(g.x, g.y);
     this.dust.update(g.x, g.y, dt, sun);
+    this.shimmer.update(g.x, g.y, g.z, dt, sun, g.head);
     this.clouds.update(g.x, g.y, sun);
     // ---- 着地 ----
     // 地面に着いた瞬間は時速100km以上出ているので、その場で止めず2秒ほどで滑るように減速しながら着地の動きへ移る

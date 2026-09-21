@@ -329,10 +329,30 @@ window.__slice = {
     return [n[0] / L, n[1] / L, n[2] / L];
   },
   sunDir: () => { const p = view.sunLight.position; const L = p.length(); return [p.x / L, p.y / L, p.z / L]; },
+  // 検査用: 時間を進めずに描き直すだけ(消した前後を同じコマで比べる)
+  redraw: () => view.renderer.render(view.scene, view.camera),
+  setTime: t => { glider.time = t; },   // 検査用: 夕方の絵を撮る
   info: () => ({ calls: view.renderer.info.render.calls, tris: view.renderer.info.render.triangles }),
   waterVisible: on => { view.water.visible = on; },
   horizonVisible: on => { view.horizon.mesh.visible = on; },
   grounds: () => ({ near: view.near, far: view.far, horizon: view.horizon }),
+  creaturesObj: k => view[k],   // 検査用
+  shimmer: () => view.shimmer,
+  // 検査用: 近景の地面の色を「地域」ごとに平均する(川沿い/乾いた台地/林/岩場)
+  groundPalette: () => {
+    const g = view.near, s2 = g.seg, out = {};
+    const add = (k, r, gr, b) => { const e = out[k] = out[k] || { n: 0, r: 0, g: 0, b: 0 }; e.n++; e.r += r; e.g += gr; e.b += b; };
+    for (let j = 0; j <= s2; j += 2) for (let i = 0; i <= s2; i += 2) {
+      const k = (j * (s2 + 1) + i) * 3;
+      const x = g.snap[0] - g.size / 2 + i * g.cell, y = g.snap[1] - g.size / 2 + j * g.cell;
+      const m = g.info[k], gv = g.info[k + 1], sl = g.info[k + 2];
+      if (g.pos[k + 1] < -9000) continue;
+      const kind = sl > 0.45 ? '岩場' : gv > 0.52 ? '林' : m > 0.46 ? '川沿い' : m < 0.3 ? '乾いた台地' : '中間';
+      add(kind, g.col[k], g.col[k + 1], g.col[k + 2]);
+    }
+    for (const k of Object.keys(out)) { const e = out[k]; e.r /= e.n; e.g /= e.n; e.b /= e.n; }
+    return out;
+  },
   pick: (x, y) => view.pick(x, y),
   waterY: () => terrain.water,
   _canvas: () => view.renderer.domElement,

@@ -1,9 +1,9 @@
 {
-  "name": "pterosaur-glide-slice",
+  "name": "pterosaur-glider",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "翼竜滑空 縦切り — 上昇風を読んで乗り継ぎ、どこまで行けるか",
+  "description": "翼竜グライダー — 上昇風を読んで乗り継ぎ、どこまで行けるか",
   "scripts": {
     "dev": "vite --port 8141",
     "build": "vite build",

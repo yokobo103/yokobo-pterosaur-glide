@@ -361,7 +361,10 @@ export const HERD = {
   walk: 0.21,         // 歩きの動き1回ぶんの前進の速さ [m/s](AstraのWalkクリップの値)
   timeScale: 3.0,     // 歩きの動きの再生速度。前進の速さも同じ倍率にする(足が滑らないように)
   active: 1800,       // この距離の群れだけ動かす [m]
-  show: 3000,         // この距離の個体だけ描く [m]。1300mだと、近いときは画面の下・映るときは小さい、で見つけられなかった
+  show: 3000,         // この距離の個体だけ骨つきで描く [m]。1300mだと、近いときは画面の下・映るときは小さい、で見つけられなかった
+  farShow: 7000,      // ここまでは板で見せる(遠くの「あれ何だ」を作る)。1体2三角形・種類ごとに描画1回
+  farMax: 90,
+  farMinPx: 5,        // 遠くでもこの画素数は残す(1画素を切ると気づけない)
   maxShown: 18,       // 同時に描く頭数の上限(1体で描画1回)
   salt: 0,            // 種類ごとに場所をずらす種
   sample: 'river',    // 置き場所の探し方: 川沿い / 区画のどこでも
@@ -378,7 +381,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,        // 全長3.2m -> 11.2m
     walk: 0.733,                  // tools/export-dryo.py が作った歩きの、接地中の足の速さ [m/s]
     timeScale: 1.0,
-    active: 1800, show: 2000, maxShown: 12, salt: 6151, sample: 'cell', step: 0.22,   // 小型なので向きは速めに変える
+    active: 1800, show: 2000, maxShown: 12, farShow: 4200, farMax: 70, farMinPx: 4, salt: 6151, sample: 'cell', step: 0.22,   // 小型なので向きは速めに変える
     // 林の縁。平らで、少し湿った所
     pick: (t, x, y) => {
       const g = t.grove(x, y);
@@ -391,7 +394,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,
     walk: 0.643,                  // tools/export-walker.py の WALK_SPEED
     timeScale: 1.0,
-    active: 1800, show: 2600, maxShown: 12, salt: 30113, sample: 'cell', step: 0.13,
+    active: 1800, show: 2600, maxShown: 12, farShow: 7000, farMax: 90, farMinPx: 5, salt: 30113, sample: 'cell', step: 0.13,
     pick: (t, x, y) => t.height(x, y) > t.water + 6 && t.slope(x, y, 30) < 0.10
                     && t.moisture(x, y) < 0.38 && t.grove(x, y) < 0.42,
   },
@@ -401,7 +404,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,
     walk: 1.0,
     timeScale: 1.0,
-    active: 2600, show: 4200, maxShown: 6, salt: 77191, sample: 'river', step: 0.07,
+    active: 2600, show: 4200, maxShown: 6, farShow: 11000, farMax: 40, farMinPx: 9, salt: 77191, sample: 'river', step: 0.07,
     pick: (t, x, y) => t.height(x, y) > t.water + 2 && t.slope(x, y, 40) < 0.08 && t.moisture(x, y) > 0.42,
   },
   // 全長8.3m -> 29m。単独か2頭。草食の群れから少し離れた開けた所にいる
@@ -410,7 +413,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,
     walk: 1.2,
     timeScale: 1.0,
-    active: 1800, show: 2600, maxShown: 4, salt: 51977, sample: 'cell', step: 0.2,
+    active: 1800, show: 2600, maxShown: 4, farShow: 6000, farMax: 30, farMinPx: 5, salt: 51977, sample: 'cell', step: 0.2,
     pick: (t, x, y) => t.height(x, y) > t.water + 4 && t.slope(x, y, 30) < 0.14
                     && t.moisture(x, y) < 0.5 && t.grove(x, y) < 0.5,
   },
@@ -511,7 +514,10 @@ export class Herds {
 // 上昇気流の中を旋回する。実際の鳥と同じで「あそこで回っている = 上がる空気がある」の手がかりになる
 export const FLOCK = {
   scale: CREATURE_SCALE,
-  show: 2400,         // この距離の上昇気流に出す [m]
+  show: 2400,         // この距離の上昇気流に骨つきで出す [m]
+  farShow: 7000,      // ここまでは板で出す。空を背に旋回しているので、遠くの上昇気流の目印になる
+  farMax: 60,
+  farMinPx: 6,
   minW: 6.5,          // これより強い上昇気流にだけ集まる [m/s]
   radius: 55,         // 旋回の半径 [m]
   turn: 0.22,         // 旋回の速さ [rad/s]
@@ -523,10 +529,11 @@ export class Flock {
   // 時刻 time における、近くの翼竜たちの位置・向き・傾き
   near(px, py, time) {
     const out = [];
-    for (const c of this.f.around(px, py, FLOCK.show)) {
+    const rad = Math.max(FLOCK.show, FLOCK.farShow);
+    for (const c of this.f.around(px, py, rad)) {
       if (c.W < FLOCK.minW) continue;
       const d = Math.hypot(c.x - px, c.y - py);
-      if (d > FLOCK.show) continue;
+      if (d > rad) continue;
       const seed = Math.abs(Math.floor(c.x * 7.31 + c.y * 3.17));
       const n = 1 + (seed % 3);                                  // 1〜3羽
       for (let i = 0; i < n; i++) {
