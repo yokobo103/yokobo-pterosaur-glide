@@ -413,7 +413,7 @@ export const SPECIES = {
     scale: CREATURE_SCALE,
     walk: 1.2,
     timeScale: 1.0,
-    active: 1800, show: 2600, maxShown: 4, farShow: 6000, farMax: 30, farMinPx: 5, salt: 51977, sample: 'cell', step: 0.2,
+    active: 1800, show: 2600, maxShown: 4, farShow: 6000, farMax: 30, farMinPx: 5, salt: 51977, sample: 'cell', step: 0.09,
     pick: (t, x, y) => t.height(x, y) > t.water + 4 && t.slope(x, y, 30) < 0.14
                     && t.moisture(x, y) < 0.5 && t.grove(x, y) < 0.5,
   },

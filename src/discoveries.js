@@ -1,7 +1,7 @@
 // 発見(Discovery)の仕組み。飛びながら「あれは何だ」と思って近づくと発見になる。
 //
 // 新しい発見対象を足すときは、DISCOVERIES に1つ足すだけでよい。
-//   id / name(名称) / desc(説明) / rarity(希少度) / radius(発見距離)
+//   id / name(名称) / desc(説明) / rarity(希少度) / radius(発見距離) / eye(見えるべき高さ)
 //   spawn(出現のさせ方) / cue(遠くからの目印) / model(見た目。無ければ地形やいきものをそのまま使う)
 // 飛び方の計算には一切触れない。
 
@@ -56,23 +56,23 @@ export const SPAWNERS = {
 // radius: この距離まで近づくと発見。draw: この距離から描く(モデルがあるときだけ)
 export const DISCOVERIES = [
   {
-    id: 'stego_herd', name: 'ステゴサウルスの群れ', rarity: 'よくいる', radius: 380,
+    id: 'stego_herd', name: 'ステゴサウルスの群れ', rarity: 'よくいる', radius: 380, eye: 25,
     desc: '背板を並べた四足の草食恐竜。開けた川辺で草を食み、ゆっくり歩いている。',
     spawn: { kind: 'herd', species: 'stego' },
     cue: { color: 0x6d5238, radius: 150, strength: 0.85 },       // 踏み荒らされた地面
   },
   {
-    id: 'volcano', name: '噴煙を上げる山', rarity: 'ときどき', radius: 1100,
+    id: 'volcano', name: '噴煙を上げる山', rarity: 'ときどき', radius: 1100, eye: 260,
     desc: '山頂がくぼみ、灰色の煙が風下へ長く流れている。遠くからでも位置が分かる。',
     spawn: { kind: 'volcano' },
   },
   {
-    id: 'summit', name: '高い山の頂', rarity: 'よくある', radius: 700,
+    id: 'summit', name: '高い山の頂', rarity: 'よくある', radius: 700, eye: 160,
     desc: '雲底より高くそびえ、越えることができない。回り込むしかない。',
     spawn: { kind: 'peak' },
   },
   {
-    id: 'oxbow', name: '大きく曲がる川', rarity: 'よくある', radius: 420,
+    id: 'oxbow', name: '大きく曲がる川', rarity: 'よくある', radius: 420, eye: 8,
     desc: '氾濫原を蛇行する川。内側に砂が溜まり、外側が深くえぐれている。',
     spawn: {
       kind: 'cell', cell: 4200, chance: 0.75, salt: 17,
@@ -85,7 +85,7 @@ export const DISCOVERIES = [
     },
   },
   {
-    id: 'nest', name: '営巣地', rarity: 'まれ', radius: 260,
+    id: 'nest', name: '営巣地', rarity: 'まれ', radius: 260, eye: 8,
     desc: '乾いた土に掘られた浅いくぼみが並び、卵が寄せ集められている。親の姿は見当たらない。',
     spawn: {
       kind: 'cell', cell: 5200, chance: 0.6, salt: 91,
@@ -99,7 +99,7 @@ export const DISCOVERIES = [
     model: { build: 'nest', scale: 3.5, draw: 1800 },             // 形はその場で作る(GLB不要)
   },
   {
-    id: 'lone_tree', name: 'ひときわ大きな木', rarity: 'ときどき', radius: 300,
+    id: 'lone_tree', name: 'ひときわ大きな木', rarity: 'ときどき', radius: 300, eye: 40,
     desc: '林から離れて一本だけ立つ大木。まわりに背の高い木がなく、遠目にも目立つ。',
     spawn: {
       kind: 'cell', cell: 3600, chance: 0.7, salt: 53,
@@ -111,26 +111,26 @@ export const DISCOVERIES = [
     model: { url: 'models/veg/conifer_lod0.glb', scale: 5, draw: 2600 },    // Astra製GLBはこの形式で足す(原型7.8m -> 39m)
   },
   {
-    id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340,
+    id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340, eye: 12,
     desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁を数頭で歩き、時どき立ち止まる。',
     // 群れは world.js の SPECIES.dryo が世界に配っている。ここでは「発見できる」ことだけを書く
     spawn: { kind: 'herd', species: 'dryo' },
     cue: { color: 0x7a6a42, radius: 80, strength: 0.55 },                     // 食み跡の薄い土
   },
   {
-    id: 'tricera_herd', name: 'トリケラトプスの群れ', rarity: 'ときどき', radius: 420,
+    id: 'tricera_herd', name: 'トリケラトプスの群れ', rarity: 'ときどき', radius: 420, eye: 28,
     desc: '三本の角と大きな襟飾りを持つ四足の草食恐竜。乾いた開けた台地を、隊列のように並んで歩く。',
     spawn: { kind: 'herd', species: 'tricera' },
     cue: { color: 0x8a6b45, radius: 130, strength: 0.7 },                     // 踏み荒らされた乾いた土
   },
   {
-    id: 'brachio_group', name: 'ブラキオサウルス', rarity: 'まれ', radius: 900,
+    id: 'brachio_group', name: 'ブラキオサウルス', rarity: 'まれ', radius: 900, eye: 45,
     desc: '首を高く上げた巨大な四足の草食恐竜。全長69m・高さ42m。川沿いの低地をゆっくり歩き、遠くからでも見つかる。',
     spawn: { kind: 'herd', species: 'brachio' },
     cue: { color: 0x6f6244, radius: 190, strength: 0.6 },
   },
   {
-    id: 'allo', name: 'アロサウルス', rarity: 'まれ', radius: 380,
+    id: 'allo', name: 'アロサウルス', rarity: 'まれ', radius: 380, eye: 30,
     desc: '大きな頭と鋭い歯を持つ二足の捕食者。単独か二頭で、草食の群れから少し離れた開けた所を歩いている。',
     spawn: { kind: 'herd', species: 'allo' },
     cue: { color: 0x5f5138, radius: 70, strength: 0.65 },

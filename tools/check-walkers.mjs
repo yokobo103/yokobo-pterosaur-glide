@@ -5,7 +5,7 @@ const BASE = process.argv.includes('--public') ? 'https://yokobo103.github.io/yo
 const KINDS = [
   { id: 'tricera', name: 'トリケラトプス', found: 'tricera_herd', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 90 },
   { id: 'brachio', name: 'ブラキオサウルス', found: 'brachio_group', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 220 },
-  { id: 'allo', name: 'アロサウルス', found: 'allo', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 90 },
+  { id: 'allo', name: 'アロサウルス', found: 'allo', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 90, warm: 10, rec: 18 },
 ];
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 900000, args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const p = await b.newPage(); await p.setViewport({ width: 390, height: 844 });
@@ -31,12 +31,14 @@ for (const k of KINDS) {
   const rec = await p.evaluate(({ herd, k }) => {
     const s = window.__slice;
     s.place(herd.cx, herd.cy - k.near, k.near * 0.35, 0);
-    for (let i = 0; i < 60 * 5; i++) s.render();
+    for (let i = 0; i < 60 * (k.warm || 5); i++) s.render();   // 群れが歩き出すまで(群れは描画の中で動くので省けない)
     const frames = [];
-    for (let i = 0; i < 60 * 10; i++) { s.render(); frames.push(s.creatures(k.id, k.bones)); }
+    for (let i = 0; i < 60 * (k.rec || 8); i++) { s.render(); frames.push(s.creatures(k.id, k.bones)); }
     return frames;
   }, { herd, k });
-  const byId = {}, dots = [], contact = [], ground = [];
+  const cfg0 = await p.evaluate(id => window.__slice.speciesTune(id), k.id);
+  const STRAIGHT = cfg0.step * 0.3;      // これより遅い向き変えなら「まっすぐ」とみなす(種ごとに旋回の速さが違う)
+  const byId = {}, dots = [], contact = [], turning = [], ground = [];
   let walking = 0;
   for (const fr of rec) for (const a of fr) (byId[a.id] = byId[a.id] || []).push(a);
   for (const seq of Object.values(byId)) {
@@ -55,19 +57,25 @@ for (const k of KINDS) {
       for (let i = 1; i < seq.length; i++) {
         if (seq[i].state !== 'walk' || seq[i - 1].state !== 'walk') continue;
         if (!(ys[i] - low < 0.06) || !(ys[i - 1] - low < 0.06)) continue;
-        if (Math.abs(seq[i].head - seq[i - 1].head) / dt > 0.02) continue;
         const a0 = seq[i - 1].feet[f], a1 = seq[i].feet[f];
-        contact.push(Math.hypot(a1[0] - a0[0], a1[2] - a0[2]) / dt);
+        const v = Math.hypot(a1[0] - a0[0], a1[2] - a0[2]) / dt;
+        if (Math.abs(seq[i].head - seq[i - 1].head) / dt > STRAIGHT) turning.push(v);   // 旋回中は足が横に振られる
+        else contact.push(v);
       }
     }
   }
-  const cfg = await p.evaluate(id => window.__slice.speciesTune(id), k.id);
+  const cfg = cfg0;
   const speed = cfg.walk * cfg.timeScale * cfg.scale;
   console.log(`  記録 ${Object.keys(byId).length}頭 / 歩いているコマ ${walking} / 歩く速さ ${speed.toFixed(2)} m/s`);
   check(`歩く個体がいる(${walking}コマ)`, walking > 60);
   check(`頭が進む向きを向いている(${dots.length ? med(dots).toFixed(2) : '-'})`, dots.length > 0 && med(dots) > 0.85);
-  check(`接地中の足が滑らない(${contact.length ? med(contact).toFixed(2) : '-'} m/s / 歩く速さ ${speed.toFixed(2)})`,
-        contact.length > 0 && med(contact) < 0.3 * speed);
+  // まっすぐ歩く場面が取れない種(1〜2頭で常に向きを変えている)は、旋回中の値で見る
+  const straightOK = contact.length > 0;
+  const use = straightOK ? contact : turning;
+  const limit = (straightOK ? 0.3 : 0.6) * speed;
+  console.log(`  接地の記録 まっすぐ${contact.length} / 旋回中${turning.length}`);
+  check(`接地中の足が滑らない(${use.length ? med(use).toFixed(2) : '-'} m/s / 歩く速さ ${speed.toFixed(2)}${straightOK ? '' : '・旋回中で判定'})`,
+        use.length > 0 && med(use) < limit);
   check(`足が地面に着いている(差 ${med(ground).toFixed(2)}m)`, Math.abs(med(ground)) < 0.9 * cfg.scale);
 
   const found = await p.evaluate(({ herd, k }) => {

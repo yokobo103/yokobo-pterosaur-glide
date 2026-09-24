@@ -1168,6 +1168,21 @@ export class View {
     const a = this._proj(P), b = this._proj(P.clone().add(new THREE.Vector3(0, 100, 0)));
     return Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])) * 57.3;
   }
+  // その点が画面に入っているか(カメラの後ろは入っていない扱い)。
+  // project() は後ろの点も画面内の座標を返すので、そのままでは使えない
+  onScreen(x, y, z, pad = 0) {
+    const v = new THREE.Vector3(x, y, z).applyMatrix4(this.camera.matrixWorldInverse);
+    if (v.z > -1) return false;                       // three.js のカメラは -Z が前
+    const q = v.applyMatrix4(this.camera.projectionMatrix);
+    return Math.abs(q.x) <= 1 + pad && Math.abs(q.y) <= 1 + pad;
+  }
+  // 発見対象が画面に映っているか。地面の点だけだと丘の陰で外れるので、高さ方向に3点みる
+  siteOnScreen(site, eye = 20, pad = 0.1) {
+    for (const f of [0, 0.5, 1]) {
+      if (this.onScreen(SX * site.x, site.z + eye * f, site.y, pad)) return true;
+    }
+    return false;
+  }
   _proj(v) {
     const q = v.clone().project(this.camera);
     const s = this.renderer.getSize(new THREE.Vector2());

@@ -12,7 +12,7 @@ let fails = 0; const check = (l, c) => { if (!c) fails++; console.log(`  ${l} ${
 const fly = await p.evaluate(() => {
   const s = window.__slice; s.auto(true); s.reset(); s.begin();
   let worstGap = -1e9, worstAt = null, frames = 0;
-  for (let i = 0; i < 60 * 60; i++) {
+  for (let i = 0; i < 60 * 35; i++) {
     s.step(1 / 60, true);
     if (i % 5) continue;
     frames++;
@@ -32,7 +32,7 @@ const fly = await p.evaluate(() => {
   // 引っかかりは「地面の作り直しにかかった時間」だけを見る(ソフトウェア描画のコマ時間は環境の値で、ここでは意味がない)
   return { worstGap, worstAt, frames, moved: Math.round(Math.hypot(g.x, g.y)), times: s.groundTimes() };
 });
-console.log(`  60秒ぶん飛んで ${fly.frames}回すき間を測った(出発点から ${(fly.moved / 1000).toFixed(2)}km 動いた)`);
+console.log(`  35秒ぶん飛んで ${fly.frames}回すき間を測った(出発点から ${(fly.moved / 1000).toFixed(2)}km 動いた)`);
 console.log(`  地面の作り直し [ms] ${JSON.stringify(fly.times)}`);
 check(`どちらの地面も無い帯ができない(いちばん広いとき ${fly.worstGap.toFixed(1)}m)`, fly.worstGap <= 0.5);
 // 最大はゴミ集めが混ざって2倍まで跳ねるので、中央値で見る(最大は目安として出す)

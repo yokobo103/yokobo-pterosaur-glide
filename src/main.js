@@ -118,7 +118,7 @@ function finish() {
 
 function reset() {
   glider = new Glider(terrain, field);
-  found = []; foundKeys = new Set(); foundTimer = 0;
+  found = []; foundKeys = new Set(); foundTimer = 0; seenAt = new Map();
   ui.found.classList.add('hidden'); ui.found.classList.remove('show');
   if (auto) auto = new Autopilot();
   ended = false; running = true;
@@ -133,6 +133,10 @@ const FOUND_STORE = 'glide.found';          // これまでに見つけたもの
 let foundAll = new Set();
 try { foundAll = new Set(JSON.parse(localStorage.getItem(FOUND_STORE) || '[]')); } catch (e) { /* 保存できない環境でも遊べる */ }
 let found = [], foundKeys = new Set(), foundTimer = 0, nextScan = 0;
+const FOUND_RANGE = 1.5;     // 画面に映っていることを条件にしたぶん、発見距離を広げる
+const FOUND_HOLD = 0;        // 猶予なし。知らせる瞬間も画面に映っていること(12秒の猶予を入れたら「映っていないのに発見」が戻った)
+const FOUND_PAD = 0.45;      // 画面のこのぶん外側までは「視界に入っている」とみなす(横の視野が36度しかないため)
+let seenAt = new Map();      // 対象ごとに「最後に画面に映っていた時刻」
 
 function showFound(item) {
   ui.foundKind.textContent = item.first ? 'NEW DISCOVERY' : 'DISCOVERED';
@@ -151,16 +155,30 @@ function scanDiscoveries(dt) {
   nextScan -= dt;
   if (nextScan > 0) return;
   nextScan = 0.25;
-  for (const site of view.sites.near(glider.x, glider.y, 1600)) {
-    if (site.d > site.type.radius || foundKeys.has(site.key)) continue;
+  // 発見は「画面に映っている」ことを条件にする。近いだけで知らせると、
+  // 始まってすぐ画面の外のものが発見されて「えっ?」になる。
+  // ただしスマホの縦画面は横の視野が36度しかないので、
+  //   ・いま映っていれば、発見距離を広げて先に気づける
+  //   ・さっき映っていたものは、そのそばを通ったときに発見になる
+  // の二段構えにする(「見ていないのに発見」は起きない)
+  let told = false;
+  for (const site of view.sites.near(glider.x, glider.y, 3000)) {
+    if (foundKeys.has(site.key)) continue;
+    const onNow = view.siteOnScreen(site, site.type.eye || 20, FOUND_PAD);
+    if (onNow) seenAt.set(site.key, glider.time);      // 遠くで見えた時点で覚えておく(距離で弾く前に)
+    if (told) continue;
+    const ago = glider.time - (seenAt.get(site.key) ?? -1e9);
+    const reach = onNow ? site.type.radius * FOUND_RANGE : site.type.radius;
+    if (site.d > reach) continue;
+    if (!onNow && ago > FOUND_HOLD) continue;
+    told = true;
     foundKeys.add(site.key);
     const first = !foundAll.has(site.type.id);
     foundAll.add(site.type.id);
     try { localStorage.setItem(FOUND_STORE, JSON.stringify([...foundAll])); } catch (e) { /* 覚えられなくても遊べる */ }
-    const item = { id: site.type.id, name: site.type.name, desc: site.type.desc, rarity: site.type.rarity, first };
+    const item = { id: site.type.id, key: site.key, name: site.type.name, desc: site.type.desc, rarity: site.type.rarity, first };
     found.push(item);
-    showFound(item);
-    break;                                   // 一度に1つだけ知らせる
+    showFound(item);                         // 一度に1つだけ知らせる(残りは「見えた」の記録だけ続ける)
   }
 }
 
@@ -331,6 +349,11 @@ window.__slice = {
   sunDir: () => { const p = view.sunLight.position; const L = p.length(); return [p.x / L, p.y / L, p.z / L]; },
   // 検査用: 時間を進めずに描き直すだけ(消した前後を同じコマで比べる)
   redraw: () => view.renderer.render(view.scene, view.camera),
+  // 検査用: その発見対象が画面に映っているか(keyで指定)
+  siteOnScreen: (key, pad = FOUND_PAD) => {     // 既定は発見判定と同じ余白
+    const site = view.sites.near(glider.x, glider.y, 4000).find(s2 => s2.key === key);
+    return site ? view.siteOnScreen(site, site.type.eye || 20, pad) : false;
+  },
   setTime: t => { glider.time = t; },   // 検査用: 夕方の絵を撮る
   info: () => ({ calls: view.renderer.info.render.calls, tris: view.renderer.info.render.triangles }),
   waterVisible: on => { view.water.visible = on; },
@@ -364,7 +387,8 @@ window.__slice = {
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) { if (!running || !glider.alive) break; glider.step(STEP, input(STEP)); }
     if (render) { view.update(glider, STEP, sunlight(glider.time)); hud(); }
-    scanDiscoveries(seconds);        // 実際の遊びと同じ経路を通す(描画の有無によらず発見は起きる)
+    // 描画しない時はカメラが古いまま。発見は「画面に映っていること」が条件なので、その時は判定しない
+    if (render) scanDiscoveries(seconds);
     checkEnd();
     return this.state();
   },
@@ -399,7 +423,7 @@ window.__slice = {
   boneY: name => { const o = view.model && view.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new o.position.constructor()); return v.y; },
   // 検査用: 近くの発見対象と、今回の発見
   sites: (rad = 2600) => view.sites.near(glider.x, glider.y, rad).map(s => ({ id: s.type.id, name: s.type.name, key: s.key, x: s.x, y: s.y, d: s.d, radius: s.type.radius })),
-  found: () => found.map(f => ({ id: f.id, name: f.name, first: f.first })),
+  found: () => found.map(f => ({ id: f.id, key: f.key, name: f.name, first: f.first })),
   foundVisible: () => ui.found.classList.contains('show') ? ui.foundName.textContent : null,
   foundListText: () => ui.foundList.textContent,
   discoveryTris: () => view.discoveries.triangles(),
