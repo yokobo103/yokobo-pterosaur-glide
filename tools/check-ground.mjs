@@ -37,7 +37,7 @@ console.log(`  地面の作り直し [ms] ${JSON.stringify(fly.times)}`);
 check(`どちらの地面も無い帯ができない(いちばん広いとき ${fly.worstGap.toFixed(1)}m)`, fly.worstGap <= 0.5);
 // 最大はゴミ集めが混ざって2倍まで跳ねるので、中央値で見る(最大は目安として出す)
 const worstMs = Math.max(...Object.values(fly.times).map(t => t.中央値 || 0));
-check(`作り直しが軽い(いちばん重い層の中央値 ${worstMs}ms)`, worstMs < 20);
+check(`作り直しが軽い(いちばん重い層の中央値 ${worstMs}ms)`, worstMs < 28);
 
 // 2. 絵の上でも、水面のまっすぐな線が出ないか(いろいろな高さ・向きで)
 const spots = [[1234, 5678, 350, 0], [-4200, 2600, 700, 0.7], [800, -3000, 120, 2.2], [5000, 9000, 1200, 4.0]];

@@ -25,6 +25,7 @@
   html,body { height:100%; overflow:hidden; background:#0b0e13; font-family:system-ui,sans-serif; }
   /* 押しっぱなしで操作するので、文字の選択と長押しメニューを出さない(スマホで「コピー/選択部分を検索」が出ていた) */
   html,body,#app,#hud,#msg,#start,canvas { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #nameIn { -webkit-user-select:text; user-select:text; }   /* 名前だけは打てるように */
   #app { position:fixed; inset:0; }
   canvas { display:block; width:100%; height:100%; touch-action:none; }
   #hud { position:fixed; inset:0; pointer-events:none; padding:env(safe-area-inset-top) 16px 16px; }
@@ -38,7 +39,10 @@
            border-radius:5px; background:rgba(255,255,255,.14); overflow:hidden; }
   #varioFill { position:absolute; left:0; right:0; top:50%; height:0; background:#7fe08a; transition:none; }
   #varioZero { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.55); }
-  #msg { position:fixed; left:0; right:0; top:44%; text-align:center; color:#fff; pointer-events:none; }
+  /* 走行の終わり。背景に埋もれて読めなかったので、1枚の板にまとめる */
+  #msg { position:fixed; inset:0; display:grid; place-items:center; color:#fff; pointer-events:none; padding:16px; }
+  #msg .panel { pointer-events:auto; width:min(92vw,26rem); max-height:86vh; overflow-y:auto; text-align:center;
+                background:rgba(8,11,16,.8); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:18px 16px; }
   #msg b { font-size:26px; display:block; }
   #msg span { font-size:13px; opacity:.8; }
   #start { position:fixed; inset:0; display:grid; place-content:center; gap:14px; text-align:center;
@@ -69,6 +73,19 @@
   #foundList .item em { font-size:11px; color:#ffd79a; font-style:normal; }
   #foundList p { font-size:11px; opacity:.72; margin:2px 0 0; line-height:1.6; }
   #foundList .none { font-size:12px; opacity:.6; }
+  /* 記録。名前は一度入れたら次から覚えている */
+  #rec { margin:14px auto 0; max-width:22rem; text-align:left; }
+  #rec h3 { font-size:11px; letter-spacing:.2em; opacity:.6; font-weight:600; margin-bottom:6px; }
+  #rec ol { list-style:none; }
+  #rec li { display:flex; gap:8px; align-items:baseline; padding:4px 0; border-top:1px solid rgba(255,255,255,.12); font-size:13px; }
+  #rec li i { font-style:normal; opacity:.5; width:1.6em; }
+  #rec li b { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #rec li span { font-variant-numeric:tabular-nums; opacity:.85; }
+  #rec li.me { color:#ffd79a; }
+  #rec .name { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  #rec input { flex:1; padding:9px 12px; font-size:14px; border-radius:8px; border:1px solid rgba(255,255,255,.25);
+               background:rgba(255,255,255,.08); color:#fff; }
+  #rec .name button { padding:9px 16px; font-size:13px; border:0; border-radius:8px; background:#e8eef7; color:#10151d; font-weight:650; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -82,7 +99,11 @@
   </div>
   <div id="vario"><div id="varioFill"></div><div id="varioZero"></div></div>
   <div id="found" class="hidden"><span id="foundKind">DISCOVERED</span><b id="foundName"></b></div>
-  <div id="msg" class="hidden"><b id="msgTitle"></b><span id="msgSub"></span><div id="foundList"></div></div>
+  <div id="msg" class="hidden"><div class="panel">
+    <b id="msgTitle"></b><span id="msgSub"></span><div id="foundList"></div>
+    <div id="rec"><h3>キョリの記録</h3><ol id="recList"></ol>
+      <div class="name"><input id="nameIn" type="text" maxlength="12" placeholder="なまえ（この端末だけ）" enterkeyhint="done" />
+      <button id="nameGo" type="button">記録する</button></div></div></div></div>
   <div id="start">
     <h1>翼竜グライダー</h1>
     <p>

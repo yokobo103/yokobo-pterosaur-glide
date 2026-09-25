@@ -38,6 +38,7 @@ const CHECKS = [
   ['山脈の世界',             'check-ridge-world.mjs', []],
   ['押しても文字が選択されない', 'check-noselect.mjs', []],
   ['着地の動き',             'check-landing.mjs', []],
+  ['キョリの記録',           'check-records.mjs', []],
 
   ['ステゴサウルス',         'check-stego.mjs', []],
   ['他の翼竜',               'check-flyers.mjs', []],
