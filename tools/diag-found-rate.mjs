@@ -7,10 +7,11 @@ await p.goto(`${BASE}?harness&seed=5&cam=a`, { waitUntil: 'networkidle0', timeou
 await p.waitForFunction(() => window.__slice && window.__slice.modelReady(), { timeout: 90000 });
 const r = [];
 for (const run of [1, 2]) {                     // 1回ずつ別に回す(まとめて回すと通信が時間切れになる)
+  await p.evaluate(() => { const s = window.__slice; s.auto(true); s.reset(); s.begin(); });
+  // 10秒ずつに分けて進める(100秒を1回のevaluateで回すと通信が時間切れになる)
+  for (let k = 0; k < 10; k++) await p.evaluate(() => { const s = window.__slice; for (let i = 0; i < 600; i++) s.step(1 / 60, true); });
   const x = await p.evaluate(() => {
     const s = window.__slice;
-    s.auto(true); s.reset(); s.begin();
-    for (let i = 0; i < 60 * 100; i++) s.step(1 / 60, true);   // 100秒
     return { n: s.found().length, ids: [...new Set(s.found().map(f => f.id))].join(','), km: +(s.state().dist / 1000).toFixed(2) };
   });
   r.push(x);

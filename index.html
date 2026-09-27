@@ -73,53 +73,77 @@
   #foundList .item em { font-size:11px; color:#ffd79a; font-style:normal; }
   #foundList p { font-size:11px; opacity:.72; margin:2px 0 0; line-height:1.6; }
   #foundList .none { font-size:12px; opacity:.6; }
-  /* 記録。名前は一度入れたら次から覚えている */
-  #rec { margin:14px auto 0; max-width:22rem; text-align:left; }
-  #rec h3 { font-size:11px; letter-spacing:.2em; opacity:.6; font-weight:600; margin-bottom:6px; }
-  #rec ol { list-style:none; }
-  #rec li { display:flex; gap:8px; align-items:baseline; padding:4px 0; border-top:1px solid rgba(255,255,255,.12); font-size:13px; }
-  #rec li i { font-style:normal; opacity:.5; width:1.6em; }
-  #rec li b { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #rec li span { font-variant-numeric:tabular-nums; opacity:.85; }
-  #rec li.me { color:#ffd79a; }
-  #rec .name { display:flex; gap:8px; margin-top:10px; align-items:center; }
-  #rec input { flex:1; padding:9px 12px; font-size:14px; border-radius:8px; border:1px solid rgba(255,255,255,.25);
-               background:rgba(255,255,255,.08); color:#fff; }
-  #rec .name button { padding:9px 16px; font-size:13px; border:0; border-radius:8px; background:#e8eef7; color:#10151d; font-weight:650; }
+  /* 走行の終わりのボタン */
+  #endBtns { display:flex; gap:8px; justify-content:center; margin-top:14px; }
+  #endBtns button { padding:10px 18px; font-size:14px; border:0; border-radius:999px; font-weight:650;
+                    background:rgba(255,255,255,.14); color:#e8eef7; pointer-events:auto; }
+  #endBtns button.main { background:#e8eef7; color:#10151d; }
+  /* ランキング。個人と世界をタブで切り替える */
+  #rank { position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
+  #rank .panel { width:min(94vw,28rem); max-height:88vh; overflow-y:auto;
+                 background:rgba(8,11,16,.94); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px; }
+  #rank h2 { font-size:15px; font-weight:650; margin-bottom:10px; text-align:center; }
+  #rankTabs { display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
+  #rankTabs button { flex:1; padding:9px 0; font-size:13px; font-weight:600; border-radius:999px;
+                     border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06); color:#e8eef7; }
+  #rankTabs button[aria-selected="true"] { background:rgba(127,224,138,.16); border-color:#7fe08a; color:#fff; }
+  #rankList { list-style:none; }
+  #rankList li { display:flex; gap:8px; align-items:baseline; padding:7px 2px; border-top:1px solid rgba(255,255,255,.1); font-size:14px; }
+  #rankList li i { font-style:normal; opacity:.5; width:2.2em; text-align:right; font-variant-numeric:tabular-nums; }
+  #rankList li b { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #rankList li u { text-decoration:none; font-size:11px; opacity:.55; }
+  #rankList li span { font-variant-numeric:tabular-nums; }
+  #rankList li.me { color:#ffd79a; }
+  #rankList .none { justify-content:center; opacity:.6; font-size:13px; }
+  #rankName { display:flex; gap:8px; margin-top:12px; }
+  #rankName input { flex:1; padding:10px 12px; font-size:15px; border-radius:10px; border:1px solid rgba(255,255,255,.25);
+                    background:rgba(255,255,255,.08); color:#fff; -webkit-user-select:text; user-select:text; }
+  #rankName button { padding:10px 16px; font-size:13px; border:0; border-radius:10px; background:#e8eef7; color:#10151d; font-weight:650; }
+  #rankFoot { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:11px; opacity:.6; }
+  #rankFoot button { padding:9px 18px; font-size:13px; border:0; border-radius:999px; background:rgba(255,255,255,.14); color:#e8eef7; font-weight:650; opacity:1; }
+  /* 言語の切り替え(スタート画面の隅) */
+  #lang { position:fixed; top:calc(env(safe-area-inset-top) + 10px); right:12px; display:flex; gap:6px; }
+  #lang button { padding:6px 12px; font-size:12px; font-weight:600; border-radius:999px;
+                 border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06); color:#e8eef7; }
+  #lang button[aria-pressed="true"] { background:rgba(255,255,255,.9); color:#10151d; }
+  /* はじめる前は数字を出さない(言語の切り替えと重なって読みにくかった) */
+  #hud.pre, #vario.pre { opacity:0; }
   .hidden { display:none !important; }
 </style>
 </head>
 <body>
   <div id="app"></div>
-  <div id="hud">
+  <div id="hud" class="pre">
     <div class="row">
       <div class="stat"><b id="dist">0.00</b><span>キョリ km</span></div>
       <div class="stat right"><b id="alt">0</b><span>タカサ m</span></div>
     </div>
   </div>
-  <div id="vario"><div id="varioFill"></div><div id="varioZero"></div></div>
+  <div id="vario" class="pre"><div id="varioFill"></div><div id="varioZero"></div></div>
   <div id="found" class="hidden"><span id="foundKind">DISCOVERED</span><b id="foundName"></b></div>
   <div id="msg" class="hidden"><div class="panel">
     <b id="msgTitle"></b><span id="msgSub"></span><div id="foundList"></div>
-    <div id="rec"><h3>キョリの記録</h3><ol id="recList"></ol>
-      <div class="name"><input id="nameIn" type="text" maxlength="12" placeholder="なまえ（この端末だけ）" enterkeyhint="done" />
-      <button id="nameGo" type="button">記録する</button></div></div></div></div>
+    <div id="endBtns"><button id="againBtn" class="main" type="button">もう一度</button>
+      <button id="rankBtn" type="button">ランキング</button></div></div></div>
+  <div id="rank" class="hidden"><div class="panel">
+    <h2 id="rankHead">この端末の記録</h2>
+    <div id="rankTabs" role="tablist">
+      <button id="tabMine" type="button" role="tab" aria-selected="true">この端末</button>
+      <button id="tabWorld" type="button" role="tab" aria-selected="false">世界</button>
+    </div>
+    <ol id="rankList"></ol>
+    <div id="rankName" class="hidden"><input id="nameIn" type="text" maxlength="12" placeholder="なまえ" enterkeyhint="done" />
+      <button id="nameGo" type="button">記録する</button></div>
+    <div id="rankFoot"><span id="seasonTag"></span><button id="rankClose" type="button">閉じる</button></div>
+  </div></div>
+  <div id="lang" class="hidden"><button type="button" data-lang="ja">日本語</button><button type="button" data-lang="en">EN</button></div>
   <div id="start">
     <h1>翼竜グライダー</h1>
-    <p>
-      上がる空気（上昇気流）に乗って、どこまで行けるか。<br>
-      見つけかたは、舞い上がっている土ぼこりの柱。<br><br>
-      操作は左右だけ。<kbd>←</kbd><kbd>→</kbd>、スマホは画面の左半分／右半分を押しっぱなし。<br>
-      押している間だけ曲がります。<br><br>
-      右の帯と音が上がっていれば、上昇気流の芯に近い。<br><br>
-      乾いて開けた地面のすぐ上は空気が暖かく、<b>低く飛ぶほど沈みにくい</b>。<br>
-      恐竜を間近で見たいときは、地面すれすれを行く。<br>
-      日が傾くと空気は上がらなくなります。降りたところが記録。
-    </p>
+    <p id="intro"></p>
     <div id="cams" role="radiogroup" aria-label="カメラ">
-      <button type="button" data-cam="a" role="radio">水平キープ</button>
-      <button type="button" data-cam="c" role="radio">見下ろし</button>
-      <button type="button" data-cam="b" role="radio">少し傾く</button>
+      <button type="button" data-cam="a" role="radio"></button>
+      <button type="button" data-cam="c" role="radio"></button>
+      <button type="button" data-cam="b" role="radio"></button>
     </div>
     <p class="note">画面酔いしやすい人は「水平キープ」か「見下ろし」</p>
     <button id="go">はじめる</button>
