@@ -155,10 +155,15 @@ async function loadWorld() {
   renderRank();
 }
 
+const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 function rowHTML(r, i, mark) {
   const me = r.at && r.at === mark;
+  const rank = i + 1;                       // 上位3つは金・銀・銅の丸で出す
+  const cls = [rank <= 3 ? `top top${rank}` : '', me ? 'me' : ''].filter(Boolean).join(' ');
   const found = r.found ? `<u>${t('discoveries', r.found)}</u>` : '';
-  return `<li class="${me ? 'me' : ''}"><i>${i + 1}</i><b>${r.name}</b>${found}<span>${r.km.toFixed(2)} ${t('km')}</span></li>`;
+  return `<li class="${cls}"><i>${rank}</i><b>${esc(r.name)}</b>${me ? `<em>${t('thisRun')}</em>` : ''}` +
+         `${found}<span>${r.km.toFixed(2)} ${t('km')}</span></li>`;
 }
 
 function renderRank(mark) {
@@ -171,7 +176,7 @@ function renderRank(mark) {
   if (!mine && worldState !== 'ok') {
     ui.rankList.innerHTML = `<li class="none">${t(worldState === 'loading' ? 'rankLoading' : worldState === 'fail' ? 'rankWorldFail' : 'rankWorldOff')}</li>`;
   } else if (!rows || !rows.length) {
-    ui.rankList.innerHTML = `<li class="none">${t('rankEmpty')}</li>`;
+    ui.rankList.innerHTML = `<li class="none">${t(mine ? 'rankEmpty' : 'rankEmptyWorld')}</li>`;
   } else {
     ui.rankList.innerHTML = rows.map((r, i) => rowHTML(r, i, mark)).join('');
   }

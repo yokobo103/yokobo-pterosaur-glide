@@ -34,11 +34,13 @@ for (const lang of ['ja', 'en']) {
   shots.push({ lang, label: lang === 'ja' ? '走行の終わり' : 'end of run', img: await p.screenshot({ encoding: 'base64' }) });
   await p.click('#rankBtn');
   shots.push({ lang, label: lang === 'ja' ? 'ランキング（この端末）' : 'ranking (this device)', img: await p.screenshot({ encoding: 'base64' }) });
-  await p.click('#nameGo'); await p.click('#tabWorld');
+  await p.click('#nameGo');
+  shots.push({ lang, label: lang === 'ja' ? '名を残したあと' : 'after saving', img: await p.screenshot({ encoding: 'base64' }) });
+  await p.click('#tabWorld');
   await new Promise(r => setTimeout(r, 300));
   shots.push({ lang, label: lang === 'ja' ? 'ランキング（世界）' : 'ranking (world)', img: await p.screenshot({ encoding: 'base64' }) });
 }
-const sh = await b.newPage(); await sh.setViewport({ width: 1640, height: 1100 });
+const sh = await b.newPage(); await sh.setViewport({ width: 2040, height: 1100 });
 const row = lang => `<div class="row">${shots.filter(s => s.lang === lang).map(s => `<figure><img src="data:image/png;base64,${s.img}"><figcaption>${s.label}</figcaption></figure>`).join('')}</div>`;
 await sh.setContent(`<meta charset="utf-8"><style>body{margin:0;padding:12px;background:#14181e;color:#e8eef7;font-family:system-ui}h2{font-size:14px;margin:10px 0 8px}.row{display:flex;gap:10px}figure{margin:0;flex:1}img{width:100%;border-radius:6px}figcaption{font-size:11px;text-align:center;opacity:.8;padding-top:4px}</style>
 <h2>日本語</h2>${row('ja')}<h2>English</h2>${row('en')}`, { waitUntil: 'networkidle0' });

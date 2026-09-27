@@ -88,17 +88,31 @@
                      border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06); color:#e8eef7; }
   #rankTabs button[aria-selected="true"] { background:rgba(127,224,138,.16); border-color:#7fe08a; color:#fff; }
   #rankList { list-style:none; }
-  #rankList li { display:flex; gap:8px; align-items:baseline; padding:7px 2px; border-top:1px solid rgba(255,255,255,.1); font-size:14px; }
-  #rankList li i { font-style:normal; opacity:.5; width:2.2em; text-align:right; font-variant-numeric:tabular-nums; }
+  #rankList li { display:flex; gap:8px; align-items:center; padding:7px 6px; border-top:1px solid rgba(255,255,255,.1);
+                 font-size:14px; border-radius:8px; }
+  #rankList li i { font-style:normal; opacity:.5; flex:none; width:1.9em; height:1.9em; display:grid; place-items:center;
+                   border-radius:50%; font-variant-numeric:tabular-nums; }
   #rankList li b { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #rankList li u { text-decoration:none; font-size:11px; opacity:.55; }
   #rankList li span { font-variant-numeric:tabular-nums; }
-  #rankList li.me { color:#ffd79a; }
-  #rankList .none { justify-content:center; opacity:.6; font-size:13px; }
+  /* 上の3つは金・銀・銅。1位だけ行も光らせる */
+  #rankList li.top i { opacity:1; color:#10151d; font-weight:700; }
+  #rankList li.top1 i { background:#e8c46a; box-shadow:0 0 12px rgba(232,196,106,.5); }
+  #rankList li.top2 i { background:#c9d3dd; }
+  #rankList li.top3 i { background:#d09a6a; }
+  #rankList li.top1 { background:linear-gradient(90deg,rgba(232,196,106,.18),rgba(232,196,106,0) 65%); }
+  #rankList li.top1 b { font-size:16px; font-weight:700; }
+  #rankList li.top1 span { font-size:15px; font-weight:650; color:#f2dda8; }
+  /* 今回の走行の行 */
+  #rankList li.me { box-shadow:inset 2px 0 0 #7fe08a; }
+  #rankList li.me em { font-style:normal; font-size:10px; font-weight:650; color:#10151d;
+                       background:#7fe08a; border-radius:999px; padding:1px 7px; }
+  #rankList .none { justify-content:center; opacity:.6; font-size:13px; padding:14px 0; }
   #rankName { display:flex; gap:8px; margin-top:12px; }
   #rankName input { flex:1; padding:10px 12px; font-size:15px; border-radius:10px; border:1px solid rgba(255,255,255,.25);
                     background:rgba(255,255,255,.08); color:#fff; -webkit-user-select:text; user-select:text; }
-  #rankName button { padding:10px 16px; font-size:13px; border:0; border-radius:10px; background:#e8eef7; color:#10151d; font-weight:650; }
+  #rankName button { padding:10px 14px; font-size:13px; border:0; border-radius:10px; background:#e8eef7; color:#10151d;
+                      font-weight:650; white-space:nowrap; flex:none; }
   #rankFoot { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:11px; opacity:.6; }
   #rankFoot button { padding:9px 18px; font-size:13px; border:0; border-radius:999px; background:rgba(255,255,255,.14); color:#e8eef7; font-weight:650; opacity:1; }
   /* 言語の切り替え(スタート画面の隅) */
