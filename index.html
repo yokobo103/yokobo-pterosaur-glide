@@ -40,13 +40,13 @@
   #varioFill { position:absolute; left:0; right:0; top:50%; height:0; background:#7fe08a; transition:none; }
   #varioZero { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.55); }
   /* 走行の終わり。背景に埋もれて読めなかったので、1枚の板にまとめる */
-  #msg { position:fixed; inset:0; display:grid; place-items:center; color:#fff; pointer-events:none; padding:16px; }
+  #msg { z-index:2; position:fixed; inset:0; display:grid; place-items:center; color:#fff; pointer-events:none; padding:16px; }
   #msg .panel { pointer-events:auto; width:min(92vw,26rem); max-height:86vh; overflow-y:auto; text-align:center;
                 background:rgba(8,11,16,.8); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:18px 16px; }
   #msg b { font-size:26px; display:block; }
   #msg span { font-size:13px; opacity:.8; }
   /* タイトル。後ろでは本物の世界が飛んでいるので、板で覆わず上下のぼかしだけで文字を読ませる */
-  #start { position:fixed; inset:0; display:flex; flex-direction:column; justify-content:space-between;
+  #start { z-index:2; position:fixed; inset:0; display:flex; flex-direction:column; justify-content:space-between;
            text-align:center; color:#fff; padding:calc(env(safe-area-inset-top) + 9vh) 22px calc(env(safe-area-inset-bottom) + 7vh);
            background:linear-gradient(180deg,rgba(5,8,13,.55) 0%,rgba(5,8,13,.16) 24%,rgba(5,8,13,0) 42%,
                                               rgba(5,8,13,.22) 70%,rgba(5,8,13,.62) 100%); }
@@ -71,7 +71,7 @@
   #subBtns svg { width:17px; height:17px; }
   #subBtns i { width:1px; height:26px; background:rgba(255,255,255,.3); }
   /* 遊び方・設定の中身 */
-  .sheet { position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
+  .sheet { z-index:10; position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
   .sheet .panel { width:min(94vw,27rem); max-height:88vh; overflow-y:auto; text-align:center;
                   background:rgba(8,11,16,.94); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:18px 16px; }
   .sheet h2 { font-size:15px; font-weight:650; margin-bottom:12px; }
@@ -88,7 +88,7 @@
   #cams button[aria-checked="true"] { background:rgba(127,224,138,.16); color:#fff; border-color:#7fe08a; }
   #cams button[aria-checked="true"]::before { content:"✓ "; color:#7fe08a; }
   /* 発見の知らせ。飛行を止めず、視界の邪魔をしない大きさで出して消える */
-  #found { position:fixed; left:0; right:0; top:22%; text-align:center; pointer-events:none;
+  #found { z-index:3; position:fixed; left:0; right:0; top:22%; text-align:center; pointer-events:none;
            opacity:0; transition:opacity .45s ease; }
   #found.show { opacity:1; }
   #found span { display:block; font-size:11px; letter-spacing:.34em; color:#ffd79a; text-shadow:0 1px 4px rgba(0,0,0,.7); }
@@ -107,7 +107,7 @@
                     background:rgba(255,255,255,.14); color:#e8eef7; pointer-events:auto; }
   #endBtns button.main { background:#e8eef7; color:#10151d; }
   /* ランキング。個人と世界をタブで切り替える */
-  #rank { position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
+  #rank { z-index:10; position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
   #rank .panel { width:min(94vw,28rem); max-height:88vh; overflow-y:auto;
                  background:rgba(8,11,16,.94); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px; }
   #rank h2 { font-size:15px; font-weight:650; margin-bottom:10px; text-align:center; }
@@ -144,7 +144,8 @@
   #rankFoot { display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:11px; opacity:.6; }
   #rankFoot button { padding:9px 18px; font-size:13px; border:0; border-radius:999px; background:rgba(255,255,255,.14); color:#e8eef7; font-weight:650; opacity:1; }
   /* 言語の切り替え(スタート画面の隅) */
-  #lang { position:fixed; top:calc(env(safe-area-inset-top) + 10px); right:12px; display:flex; gap:6px; }
+  /* 言語の切り替えは常に一番上。下に敷くと板に覆われて指が当たらない(所長「英語押せない?」) */
+  #lang { z-index:30; position:fixed; top:calc(env(safe-area-inset-top) + 10px); right:12px; display:flex; gap:6px; }
   #lang button { padding:6px 12px; font-size:12px; font-weight:600; border-radius:999px;
                  border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06); color:#e8eef7; }
   #lang button[aria-pressed="true"] { background:rgba(255,255,255,.9); color:#10151d; }

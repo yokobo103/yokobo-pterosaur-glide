@@ -12,13 +12,16 @@ await p.waitForFunction(() => window.__slice && window.__slice.modelReady(), { t
 let fails = 0; const check = (l, c) => { if (!c) fails++; console.log(`  ${l} ${c ? 'PASS' : 'FAIL'}`); };
 const hidden = id => p.evaluate(i => document.getElementById(i).classList.contains('hidden'), id);
 // 押せることまで見る(pointer-events を素通りしない)
-const tap = async id => {
-  const ok = await p.evaluate(i => {
-    const e = document.getElementById(i), r = e.getBoundingClientRect();
-    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === e;
-  }, id);
-  if (!ok) { fails++; console.log(`  #${id} が押せない FAIL`); }
-  await p.click(`#${id}`);
+const tap = async sel => {
+  const s2 = sel.startsWith('#') || sel.includes(' ') ? sel : `#${sel}`;
+  const ok = await p.evaluate(x => {
+    const e = document.querySelector(x); if (!e) return false;
+    const r = e.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!at && (at === e || e.contains(at));      // ボタンの中の字や絵に当たるのはよい
+  }, s2);
+  if (!ok) { fails++; console.log(`  ${s2} が押せない FAIL`); }
+  await p.click(s2);
 };
 
 // 1走行を終わらせる(地面すれすれに置いて着地させる)
@@ -98,7 +101,7 @@ check('距離の大きい順に並ぶ', kept[0].km >= kept[1].km);
 
 // 英語(発見が1つ出る走り方にして、名前と説明まで英語になることを見る)
 await land(500);
-await p.evaluate(() => document.querySelector('#lang button[data-lang="en"]').click());
+await tap('#lang button[data-lang="en"]');
 await tap('rankBtn');
 const en = await p.evaluate(() => ({
   head: document.getElementById('rankHead').textContent,

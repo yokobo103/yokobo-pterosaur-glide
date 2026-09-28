@@ -53,6 +53,16 @@ check('操作の説明が出ている', (await p.$eval('#intro', e => e.textCont
 check('遊び方を閉じられる', await tap('#howtoClose') && (await p.$eval('#howto', e => e.classList.contains('hidden'))));
 check('「はじめる」に指が当たる', await tap('#go'));
 check('スタート画面が閉じる', await p.$eval('#start', e => e.classList.contains('hidden')));
+console.log('■ 言語の切り替え(タイトルの右上)');
+await p.goto(BASE + '?seed=17', { waitUntil: 'networkidle0', timeout: 120000 });
+await p.waitForFunction(() => !!window.__slice);
+check('EN に指が当たる', await tap('#lang button[data-lang="en"]'));
+const en = await p.evaluate(() => ({ lang: document.documentElement.lang, title: document.getElementById('title').textContent, go: document.getElementById('goLabel').textContent }));
+console.log(`  EN を押したあと: <html lang=${en.lang}> "${en.title}" / "${en.go}"`);
+check('英語になる', en.lang === 'en' && en.title === 'Pterosaur Glider' && en.go === 'Start');
+check('日本語 に指が当たる', await tap('#lang button[data-lang="ja"]'));
+check('日本語に戻る', await p.evaluate(() => document.documentElement.lang) === 'ja');
+
 console.log('■ URLで指定したときはURLが優先');
 await p.goto(BASE + '?seed=17&cam=a', { waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
