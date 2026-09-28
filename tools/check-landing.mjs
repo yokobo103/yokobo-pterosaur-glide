@@ -11,11 +11,11 @@ let fails = 0; const check = (l, c) => { if (!c) fails++; console.log(`  ${l} ${
 // 平らな所で低く飛ばして、着地させる
 await p.evaluate(() => { const s = window.__slice; s.auto(false); s.reset(); s.begin(); s.place(0, 1500, 12, 0); s.forceInput = 0; });
 const shots = [];
-let prevDist = 0;
+let prevDist = 0; const spans = [];
 await p.evaluate(() => { const s = window.__slice; for (let i = 0; i < 60 * 12 && s.state().alive; i++) s.step(1/60, i % 3 === 0); s.render(); });
 const at = await p.evaluate(() => window.__slice.state());
 check('地面に着いた', !at.alive);
-for (const [t, label] of [[0.3, '着地0.3秒'], [1.0, '1秒'], [2.5, '2.5秒'], [5.0, '5秒'], [7.5, '7.5秒(地上待機)']]) {
+for (const [t, label] of [[0.2, '着地0.2秒'], [0.6, '0.6秒'], [1.2, '1.2秒'], [2.2, '2.2秒'], [5.0, '5秒'], [7.5, '7.5秒(地上待機)']]) {
   const st = await p.evaluate(tt => {
     const s = window.__slice; const cur = s.landing() ? s.landing().t : 0;
     const n = Math.max(1, Math.round((tt - cur) * 60));
@@ -36,8 +36,15 @@ for (const [t, label] of [[0.3, '着地0.3秒'], [1.0, '1秒'], [2.5, '2.5秒'],
     if (label === '5秒') prevDist = h.dist;
     else check(`地上待機に切り替わっても飛び戻らない(カメラから頭まで ${prevDist.toFixed(1)}m -> ${h.dist.toFixed(1)}m)`, Math.abs(h.dist - prevDist) < 0.8);
   }
-  if (label === '1秒') check(`着地の動きに切り替わっている(滑空 ${st.glide} / 着地 ${st.land})`, st.land);
+  if (label === '0.6秒') check(`着地の動きに切り替わっている(滑空 ${st.glide} / 着地 ${st.land})`, st.land);
+  // 着いてから羽ばたかないこと。翼の開きが縮む一方かを見る
+  if (label === '着地0.2秒' || label === '2.2秒') {
+    const w = await p.evaluate(() => window.__slice.wingSpan());
+    spans.push([label, w]);
+  }
 }
+console.log(`  翼の開き: ${spans.map(([l, w]) => `${l} ${w.toFixed(2)}`).join(' -> ')}`);
+check('着いたあとは畳む一方(羽ばたき直さない)', spans.length === 2 && spans[1][1] < spans[0][1]);
 check('エラーなし', errs.length === 0); if (errs.length) console.log(errs);
 const s = await b.newPage();
 await s.setViewport({ width: 1400, height: 800 });

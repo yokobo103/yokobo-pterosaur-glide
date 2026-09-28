@@ -31,10 +31,18 @@ export const LIGHT = {
   elevBase: 5, elevGain: 16,     // 太陽の高度 [度] = elevBase + elevGain * 日照
 };
 
+// 着地の動き(Landing_Fold 6.0秒)の使う範囲。
+// 中身を測ったら 0〜3.2秒は空中での羽ばたき、3.25〜4.5秒で翼を畳み、そのあとは静止して待つだけだった。
+// 着いた瞬間から再生すると「地面で羽ばたいてから畳む」になるので、畳むところだけを使う。
+export const LAND = { skip: 2.8, end: 4.8 };
+
 export const CAMS = {
   a:   { name: '水平キープ',   back: 120, up: 52, ahead: 360, look: -6,  roll: 0.0,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 本物の翼竜では up34 だと翼を真横から見て細い線になった
   b:   { name: '少しだけ傾く', back: 120, up: 52, ahead: 360, look: -6,  roll: 0.1,  yawTau: 0.6, fov: 70, lookDrop: 0 },  // 所長の試走: 14度=酔う / 10度=ギリギリ / 5度=快適
   c:   { name: '見下ろし',     back: 120, up: 95, ahead: 200, look: -60, roll: 0.0,  yawTau: 0.6, fov: 66, lookDrop: 0 },
+  // タイトルの後ろの見本飛行だけに使う。4通り並べて選んだ(screenshots/_タイトルのカメラ.png)。
+  // 見下ろす向きを強くして翼竜を画面の真ん中へ上げる(遊ぶときのカメラだとボタンに被って切れる)
+  title: { name: 'タイトル',   back: 120, up: 40,  ahead: 300, look: -260, roll: 0.0, yawTau: 0.9, fov: 62, lookDrop: 0 },
   // 比較用: 直す前の版(カメラが逆向きに0.75傾く)。選択肢には出さない
   old: { name: '直す前',       back: 105, up: 28, ahead: 320, look: 7,   roll: -0.75, yawTau: 0.75, fov: 62 },
 };
@@ -1098,23 +1106,61 @@ export class View {
       // 着地の動きはRootが前へ約2.4m進む。地上待機はRootが原点から始まるので、そのまま切り替えると後ろへ飛び戻って画面の下へ消えた
       const rootTrack = this.clips.Landing_Fold.tracks.find(t => /^Root\.position$/.test(t.name));
       this.rootTrackNames = this.clips.Landing_Fold.tracks.filter(t => /position/.test(t.name)).map(t => t.name).slice(0, 8);
-      this.landShift = 0;
-      if (rootTrack) {
-        const v = rootTrack.values, n = v.length;
-        this.landShift = Math.hypot(v[n - 3] - v[0], v[n - 1] - v[2]) * this.size.scale;
-      }
+      // 動きの時刻tまでにRootが前へ進んだ距離。頭を飛ばして再生するので、途中の値が要る
+      this.rootAt = t => {
+        if (!rootTrack) return 0;
+        const ts = rootTrack.times, v = rootTrack.values, last = ts.length - 1;
+        let i = 0; while (i < last && ts[i + 1] < t) i++;
+        const j = Math.min(i + 1, last), span = ts[j] - ts[i];
+        const f = span > 0 ? Math.max(0, Math.min(1, (t - ts[i]) / span)) : 0;
+        const at = k => [v[k * 3], v[k * 3 + 1], v[k * 3 + 2]];
+        const a = at(i), b2 = at(j), s0 = at(0);
+        const x = a[0] + (b2[0] - a[0]) * f, z = a[2] + (b2[2] - a[2]) * f;
+        return Math.hypot(x - s0[0], z - s0[2]) * this.size.scale;
+      };
+      this.landShift = this.rootAt(this.clips.Landing_Fold.duration);
       this.mixer.addEventListener('finished', e => {
-        if (e.action === this.act.land && this.landing) {
-          this.landing.shift = this.landShift;                // 進んだ分だけ機体の位置を前へ送ってから切り替える
-          this.act.land.stop();
-          this.act.idle.reset().play();
-        }
+        if (e.action === this.act.land && this.landing) this.toGroundIdle();
       });
       this.flyers.setModel(m, this.clips);     // 同じモデルを他の翼竜にも使う
       this.modelReady = true;
     }, undefined, err => { console.error('翼竜の読み込みに失敗。灰色の箱のまま飛ぶ', err); });
   }
   // 検査用: 骨の画面上の位置とカメラからの距離
+  // 着地の動きを地上待機へ渡す。進んだ分だけ体を前へ送ってから切り替える(でないと後ろへ飛び戻る)
+  toGroundIdle() {
+    if (!this.landing || !this.act) return;
+    this.landing.shift = this.rootAt(Math.min(this.act.land.time, this.clips.Landing_Fold.duration));
+    this.act.land.stop();
+    this.act.idle.reset().play();
+  }
+  // 検査用: いまの翼の開き具合(翼端どうしの間隔)
+  wingSpan() {
+    if (!this.model) return 0;
+    const w = n => { const o = this.model.getObjectByName(n); if (!o) return null; const v = new THREE.Vector3(); o.getWorldPosition(v); return v; };
+    const L = w('HandL'), R = w('HandR');
+    return L && R ? L.distanceTo(R) : 0;
+  }
+  // 検査用: 着地の動きの好きな時刻の姿を作り、翼の開き具合を測る
+  poseLand(t) {
+    if (!this.act || !this.model || !this.clips) return null;
+    const a = this.act.land;
+    a.enabled = true; a.setEffectiveWeight(1); a.paused = true; a.time = t;
+    this.mixer.update(0);
+    this.model.updateWorldMatrix(true, true);
+    const local = n => {
+      const o = this.model.getObjectByName(n);
+      if (!o) return null;
+      const v = new THREE.Vector3(); o.getWorldPosition(v);
+      return this.model.worldToLocal(v);
+    };
+    const L = local('HandL'), R = local('HandR'), H = local('Head'), F = local('FootL');
+    return { t: +t.toFixed(3),
+             span: L && R ? +Math.hypot(L.x - R.x, L.z - R.z).toFixed(3) : 0,   // 翼端どうしの間隔(開き具合)
+             handY: L ? +L.y.toFixed(3) : 0, headY: H ? +H.y.toFixed(3) : 0, footY: F ? +F.y.toFixed(3) : 0 };
+  }
+  resumeLand() { if (this.act) this.act.land.paused = false; }
+
   boneInfo(name) {
     if (!this.model) return null;
     const o = this.model.getObjectByName(name);
@@ -1224,7 +1270,8 @@ export class View {
       if (!this.landing) {
         this.landing = { t: 0, x: g.x, y: g.y, head: g.head, v: 32 };
         this.act.land.reset().play();
-        this.act.glide.crossFadeTo(this.act.land, 0.35, false);
+        this.act.land.time = LAND.skip;                       // 頭の羽ばたきは飛ばす。着いてから羽ばたくと変(所長の指摘)
+        this.act.glide.crossFadeTo(this.act.land, 0.25, false);
       }
       const L = this.landing, tau = 0.45;
       L.t += dt;
@@ -1234,7 +1281,10 @@ export class View {
       this.glider.position.set(SX * P.x, P.z, P.y);
       this.glider.rotation.set(0, -P.head, 0, 'YXZ');
       this.model.position.y = 0;                              // 着地の動きは足元が原点。空中用の持ち上げを外す
-      this.model.position.z = L.shift || 0;                  // 地上待機に移ったら、着地で進んだ分だけ体だけを前へ(カメラは動かさない)
+      // 頭を飛ばして再生するぶん、Rootが先へ進んだ分を引いておく(引かないと体だけ前へ飛び出す)
+      this.model.position.z = (L.shift ?? 0) - this.rootAt(LAND.skip);
+      // 畳み終わったら、動きの最後(静止して待つだけ)を待たずに地上待機へ
+      if (L.shift === undefined && this.act.land.time >= LAND.end) this.toGroundIdle();
     } else {
       if (this.landing) {                                     // やり直したら空中の姿へ戻す
         this.landing = null;

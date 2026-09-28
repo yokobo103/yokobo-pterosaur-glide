@@ -18,7 +18,11 @@ const cdp = await p.createCDPSession();
 async function tap(selector) {
   const r = await p.$eval(selector, e => { const b = e.getBoundingClientRect(); return { x: b.x + b.width/2, y: b.y + b.height/2 }; });
   // 指が本当にそのボタンに当たるか(上に何か被っていないか)
-  const hit = await p.evaluate(({x, y}, sel) => document.elementFromPoint(x, y) === document.querySelector(sel), r, selector);
+  // ボタンの中に字や絵が入っていてもよい(押せば効く)。上に別のものが被っていないかを見る
+  const hit = await p.evaluate(({x, y}, sel) => {
+    const target = document.querySelector(sel), at = document.elementFromPoint(x, y);
+    return !!at && (at === target || target.contains(at));
+  }, r, selector);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x, y: r.y, id: 1 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await new Promise(res => setTimeout(res, 150));
@@ -27,7 +31,9 @@ async function tap(selector) {
 
 console.log('■ 初回');
 check('何も選んでいなければ「水平キープ」', await p.evaluate(() => window.__slice.camKey()) === 'a');
-console.log('■ 「見下ろし」をタップ');
+console.log('■ 設定を開いて「見下ろし」をタップ');
+check('設定のボタンに指が当たる', await tap('#setBtn'));
+check('設定が開く', !(await p.$eval('#settings', e => e.classList.contains('hidden'))));
 check('指がボタンに当たる', await tap('#cams button[data-cam="c"]'));
 check('カメラが見下ろしになる', await p.evaluate(() => window.__slice.camKey()) === 'c');
 check('選んだボタンだけが選択表示', await p.evaluate(() =>
@@ -36,9 +42,15 @@ console.log('■ 開き直す');
 await p.reload({ waitUntil: 'networkidle0', timeout: 120000 });
 await p.waitForFunction(() => !!window.__slice);
 check('前回の「見下ろし」を覚えている', await p.evaluate(() => window.__slice.camKey()) === 'c');
-console.log('■ 「少し傾く」をタップして、はじめる');
+console.log('■ 設定を開いて「少し傾く」をタップして、はじめる');
+await tap('#setBtn');
 check('指がボタンに当たる', await tap('#cams button[data-cam="b"]'));
 check('傾きの強さ 0.1', await p.evaluate(() => window.__slice.camRoll()) === 0.1);
+check('設定を閉じられる', await tap('#setClose') && (await p.$eval('#settings', e => e.classList.contains('hidden'))));
+console.log('■ 遊び方');
+check('遊び方に指が当たる', await tap('#howtoBtn'));
+check('操作の説明が出ている', (await p.$eval('#intro', e => e.textContent)).length > 40);
+check('遊び方を閉じられる', await tap('#howtoClose') && (await p.$eval('#howto', e => e.classList.contains('hidden'))));
 check('「はじめる」に指が当たる', await tap('#go'));
 check('スタート画面が閉じる', await p.$eval('#start', e => e.classList.contains('hidden')));
 console.log('■ URLで指定したときはURLが優先');

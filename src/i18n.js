@@ -4,6 +4,8 @@
 const DICT = {
   ja: {
     title: '翼竜グライダー',
+    tagline: '風をつかんで、どこまでも。',
+    howto: '遊び方', settings: '設定', camLabel: 'カメラ', back: '閉じる',
     hudDist: 'キョリ km', hudAlt: 'タカサ m',
     intro: [
       '上がる空気（上昇気流）に乗って、どこまで行けるか。',
@@ -37,6 +39,8 @@ const DICT = {
   },
   en: {
     title: 'Pterosaur Glider',
+    tagline: 'Catch the wind. Go as far as you can.',
+    howto: 'How to play', settings: 'Settings', camLabel: 'Camera', back: 'Close',
     hudDist: 'DIST km', hudAlt: 'ALT m',
     intro: [
       'Ride the rising air and see how far you can go.',

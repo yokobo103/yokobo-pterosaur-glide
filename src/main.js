@@ -15,7 +15,12 @@ let CAM_KEY = CAMS[q.get('cam')] ? q.get('cam') : (CAMS[saved] && saved !== 'old
 const camOf = key => {
   const ld = Number(q.get('lookdrop'));                 // 調整用: ?lookdrop=0 で下向きを切る
   const r = Number(q.get('roll'));                     // 調整用: ?roll=0.2 で傾きの強さだけ上書き
-  const base = q.has('lookdrop') && Number.isFinite(ld) ? { ...CAMS[key], lookDrop: ld } : CAMS[key];
+  let base = q.has('lookdrop') && Number.isFinite(ld) ? { ...CAMS[key], lookDrop: ld } : CAMS[key];
+  // 調整用: ?tcam=back,up,look でタイトルのカメラだけ動かす
+  if (key === 'title' && q.has('tcam')) {
+    const [bk, up, lk] = q.get('tcam').split(',').map(Number);
+    base = { ...base, back: bk || base.back, up: up || base.up, look: Number.isFinite(lk) ? lk : base.look };
+  }
   return Number.isFinite(r) && q.has('roll') ? { ...base, roll: r } : base;
 };
 if (CAM_KEY === 'old') { AIR.bankRate = 1.6; AIR.inputTau = 0; }   // 直す前の再現(比較測定用)
@@ -30,16 +35,17 @@ const ui = {
   nameIn: el('nameIn'), nameGo: el('nameGo'), tabMine: el('tabMine'), tabWorld: el('tabWorld'),
   rankClose: el('rankClose'), seasonTag: el('seasonTag'), intro: el('intro'), lang: el('lang'),
   start: el('start'), go: el('go'),
+  howto: el('howto'), howtoBtn: el('howtoBtn'), howtoClose: el('howtoClose'),
+  settings: el('settings'), setBtn: el('setBtn'), setClose: el('setClose'),
 };
 
 const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'hills';   // 既定は丘のある世界。?world=flat で起伏なし
 Object.assign(TUNE, WORLDS[WORLD]);
-if (WORLD === 'ridge') {
-  const p = document.querySelector('#start p');
-  if (p) p.insertAdjacentHTML('beforeend',
-    '<br><br><b>山脈の世界：</b>風は左から吹いています。山の<b>左側の斜面</b>に沿って飛ぶと上がります。' +
-    '反対側の斜面は下がる空気。鞍部で途切れたら、上昇気流か次の尾根へ。');
-}
+// 世界ごとの但し書き。遊び方の終わりに足す(言葉を切り替えても消えないよう、applyLangから入れ直す)
+const WORLD_NOTE = WORLD === 'ridge'
+  ? '<br><br><b>山脈の世界：</b>風は左から吹いています。山の<b>左側の斜面</b>に沿って飛ぶと上がります。' +
+    '反対側の斜面は下がる空気。鞍部で途切れたら、上昇気流か次の尾根へ。'
+  : '';
 const terrain = new Terrain(SEED);
 const field = new ThermalField(terrain, SEED);
 const SIZE_KEY = SIZES[q.get('size')] ? q.get('size') : '1';   // 既定は実寸・カメラ後ろ5m(所長 2026-09-17)。?size=2|3 は比較用に残す
@@ -66,6 +72,14 @@ function pickCam(key) {
 }
 for (const b of camButtons) b.addEventListener('click', () => pickCam(b.dataset.cam));
 for (const b of camButtons) b.setAttribute('aria-checked', String(b.dataset.cam === CAM_KEY));
+// 遊び方と設定。タイトルの上に重ねて出す
+const sheet = (node, on) => node.classList.toggle('hidden', !on);
+ui.howtoBtn.addEventListener('click', () => sheet(ui.howto, true));
+ui.howtoClose.addEventListener('click', () => sheet(ui.howto, false));
+// 設定を開いている間は、選んだカメラをそのまま見せる(違いが分かる)。閉じたらタイトルの見せ方へ戻す
+ui.setBtn.addEventListener('click', () => { sheet(ui.settings, true); if (demo) view.setCam(camOf(CAM_KEY)); });
+ui.setClose.addEventListener('click', () => { sheet(ui.settings, false); if (demo) view.setCam(camOf('title')); });
+
 const vario = new Vario();
 let glider = new Glider(terrain, field);
 let running = false, ended = false;
@@ -211,10 +225,15 @@ const showHud = () => { el('hud').classList.remove('pre'); el('vario').classList
 function applyLang() {
   document.documentElement.lang = getLang();
   document.title = t('title');
-  el('intro').innerHTML = t('intro').join('<br>');
-  document.querySelector('#start h1').textContent = t('title');
-  document.querySelector('#start .note').textContent = t('camNote');
-  el('go').textContent = t('start');
+  el('intro').innerHTML = t('intro').join('<br>') + WORLD_NOTE;
+  el('title').textContent = t('title');
+  el('tagline').textContent = t('tagline');
+  el('goLabel').textContent = t('start');
+  el('howtoLabel').textContent = el('howtoTitle').textContent = t('howto');
+  el('setLabel').textContent = el('setTitle').textContent = t('settings');
+  el('camLabel').textContent = t('camLabel');
+  el('camNote').textContent = t('camNote');
+  ui.howtoClose.textContent = ui.setClose.textContent = t('back');
   for (const b of document.querySelectorAll('#cams button')) b.textContent = t('cam' + b.dataset.cam.toUpperCase());
   document.querySelectorAll('.stat span')[0].textContent = t('hudDist');
   document.querySelectorAll('.stat span')[1].textContent = t('hudAlt');
@@ -335,7 +354,7 @@ let acc = 0, last = performance.now();
 
 // 走行が終わったかの判定。実際の遊びでも検査用のコマ送りでも、必ずここを通す
 function checkEnd() {
-  if (ended) return;
+  if (ended || demo) return;               // 見本飛行は記録にしない
   if (!glider.alive || (sunlight(glider.time) <= 0 && glider.vz < 0 && glider.agl < 3)) finish();
 }
 
@@ -350,22 +369,44 @@ function advance(dt) {
   checkEnd();
 }
 
+// タイトルの後ろでは、実際の世界を自動操縦で飛ばして見せる。
+// 静止画を貼るより世界が伝わるし、絵の素材も要らない。日暮れは止めて、光を夕方の手前に固定する。
+// 見本飛行の見た目。9通り並べて選んだ(screenshots/_タイトルの光.png)。
+// 見た目は夕方(空が橙)、空気の強さは昼のまま。絵と物理を分けているのは、
+// 夕方の弱い上昇気流だとすぐ降りてしまい、タイトルの後ろで何度も飛び直すことになるため。
+const DEMO_SUN = +q.get('demosun') || 0.39;      // 絵に使う日の高さ(低いほど橙)
+const DEMO_TIME = AIR.day * (+q.get('demotime') || 0.45);   // 空気の強さに使う時刻(昼寄り)
+const DEMO_ALT = +q.get('demoalt') || 380;
+let demo = false;
+function demoFlight() {
+  demo = true; ended = false; running = true;
+  view.setCam(camOf('title'));
+  glider = new Glider(terrain, field, { alt: DEMO_ALT });
+  glider.time = DEMO_TIME;
+  auto = new Autopilot();
+}
+
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   advance(dt);
-  view.update(glider, dt, sunlight(glider.time));
-  vario.update(glider.vz, dt);
-  scanDiscoveries(dt);
-  hud();
+  if (demo) {
+    glider.time = DEMO_TIME;                // 日を進めない(タイトルを開いたままでも暗くならない)
+    if (!glider.alive) demoFlight();        // 降りたら次の便へ
+  }
+  view.update(glider, dt, demo ? DEMO_SUN : sunlight(glider.time));
+  if (!demo) { vario.update(glider.vz, dt); scanDiscoveries(dt); hud(); }
   if (!HARNESS) requestAnimationFrame(frame);
 }
 
 ui.go.addEventListener('click', () => {
   vario.start();
   ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); showHud();
-  running = true; last = performance.now();
-  if (!HARNESS) requestAnimationFrame(frame);
+  demo = false; auto = null;
+  view.setCam(camOf(CAM_KEY));              // 遊ぶときのカメラへ戻す
+  reset();                                  // 見本飛行とは別に、まっさらな走行を始める
+  last = performance.now();
 });
+
 
 // ---- 検査用の口。画面が出ない環境でもここから回す ----
 window.__slice = {
@@ -414,6 +455,10 @@ window.__slice = {
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),
   bone: name => view.boneInfo(name),
+  // 検査用: 着地の動きの長さと、時刻ごとの姿
+  landClip: () => (view.clips && view.clips.Landing_Fold ? { dur: view.clips.Landing_Fold.duration } : null),
+  landPose: t => view.poseLand(t),
+  wingSpan: () => view.wingSpan(),
   volcanoes: rad => terrain.volcanoesNear(glider.x, glider.y, rad || 20000).map(v => ({ x: v.x, y: v.y, H: Math.round(v.H), top: Math.round(terrain.height(v.x, v.y)) })),
   // 検査用: 地面の2層(近景・遠景)の位置と、水面
   // 検査用: 作り直しにかかった時間の分布(最初の1回は準備も含むので分けて見る)
@@ -589,4 +634,4 @@ window.__slice = {
 };
 
 if (HARNESS) { running = false; view.update(glider, 0, 1); hud(); }
-else requestAnimationFrame(frame);
+else { demoFlight(); last = performance.now(); requestAnimationFrame(frame); }   // タイトルの後ろで飛ばしておく
