@@ -417,6 +417,17 @@ export const SPECIES = {
     pick: (t, x, y) => t.height(x, y) > t.water + 4 && t.slope(x, y, 30) < 0.14
                     && t.moisture(x, y) < 0.5 && t.grove(x, y) < 0.5,
   },
+  // 全長12.3m -> 43m。GLBはアロと同じ座標系(全長8.3)で作ったので x1.48 する。
+  // いつも1頭。トリケラと同じ乾いた台地にいる(時代は気にしない。所長 2026-09-28)
+  trex: {
+    cell: 5200, chance: 0.4, min: 1, max: 1, spread: 40,
+    scale: CREATURE_SCALE * 1.48,
+    walk: 1.022,                  // tools/export-walker.py trex の WALK_SPEED
+    timeScale: 1.0,
+    active: 1800, show: 2800, maxShown: 3, farShow: 7000, farMax: 20, farMinPx: 6, salt: 88411, sample: 'cell', step: 0.08,
+    pick: (t, x, y) => t.height(x, y) > t.water + 5 && t.slope(x, y, 30) < 0.12
+                    && t.moisture(x, y) < 0.42 && t.grove(x, y) < 0.45,
+  },
 };
 
 export class Herds {

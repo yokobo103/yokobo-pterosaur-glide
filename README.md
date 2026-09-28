@@ -124,6 +124,16 @@ npm run dev     # http://localhost:8141
 - リグの無い静止モデルは `blender -b --factory-startup <元.blend> --python tools/export-static.py -- <出力.glb> <三角形の目標> [除外する名前]`
   で書き出す。頂点カラーの体色はそのまま残る
 
+## ずかん
+
+タイトルの「ずかん」。**出会ったものだけ名前と説明が出て、出会っていないものは番号と `???`**。
+
+- 並びと番号は `src/discoveries.js` の `no`。**発見できるものを足せば、ずかんもそのぶん増える**
+  （番号は書いたものをそのまま使うので、並べ替えても番号は動かない）。恐竜が 01〜、地形はそのあと
+- 「これまでに出会ったもの」は `localStorage`（`glide.found`）。走行をまたいで残る
+- 閉じるボタンは下に貼り付けてある（件数が増えても、下まで送らずに閉じられる）
+- 検査は `tools/check-dex.mjs`（`???` / 連番 / 出会ったら名前が出る / 開き直しても残る / 英語 / 指が当たる）
+
 ## ランキング
 
 走行の終わりの板には**その回の距離と発見**だけを出す。記録は「ランキング」ボタンの中に分けた
@@ -157,7 +167,22 @@ npm run dev     # http://localhost:8141
 3. **描画**: `src/scene.js` の View で `new Creatures(terrain, this.scene, SPECIES.<名前>)` を1行。
    モデルの読み込みは `src/main.js` で1行
 4. **発見**: `src/discoveries.js` に `spawn: { kind: 'herd', species: '<名前>' }` で1つ足す
-5. **検査**: `tools/check-walkers.mjs` の `KINDS` に1行足す（足の滑り・接地・向き・発見を測る）
+5. **検査**: `tools/check-walkers.mjs` の `KINDS` に1行足す（足の滑り・接地・向き・発見を測る）。
+   接地とみなす幅は**足が上下する幅の下から12%**。以前は6cm固定で、体の大きい種では標本が
+   ほとんど取れず（ティラノで1525コマ中46コマ）、残った数コマの雑音で「足が滑る」と誤って落ちた
+
+## 検査を回すとき
+
+```
+npm run build && node tools/run-checks.mjs      # 全部(約30分)
+node tools/with-dist.mjs tools/check-dex.mjs    # 1本だけ
+```
+
+- **同梱のChromeが Windows の Application Control(Smart App Control) に止められることがある。**
+  2026-09-28に発生し、`Error: spawn UNKNOWN` で1秒で落ちた（製品ではなく環境の問題）。
+  `tools/browser.mjs` が使えるブラウザを1つ選び、止められていたら端末に入っているChrome/Edgeへ逃がす。
+  自分で指定したいときは `PUPPETEER_EXECUTABLE_PATH` を立てる
+- 検査で押す所は**当たり判定つきの本物のタップ**で見る（`element.click()` は重なりを素通りする）
 
 ## 構成
 

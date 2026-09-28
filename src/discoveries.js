@@ -1,7 +1,7 @@
 // 発見(Discovery)の仕組み。飛びながら「あれは何だ」と思って近づくと発見になる。
 //
 // 新しい発見対象を足すときは、DISCOVERIES に1つ足すだけでよい。
-//   id / name(名称) / desc(説明) / rarity(希少度) / radius(発見距離) / eye(見えるべき高さ)
+//   no(ずかんの番号) / id / name(名称) / desc(説明) / rarity(希少度) / radius(発見距離) / eye(見えるべき高さ)
 //   en(英語の名称・説明・希少度)
 //   spawn(出現のさせ方) / cue(遠くからの目印) / model(見た目。無ければ地形やいきものをそのまま使う)
 // 飛び方の計算には一切触れない。
@@ -57,26 +57,26 @@ export const SPAWNERS = {
 // radius: この距離まで近づくと発見。draw: この距離から描く(モデルがあるときだけ)
 export const DISCOVERIES = [
   {
-    id: 'stego_herd', name: 'ステゴサウルスの群れ', rarity: 'よくいる', radius: 380, eye: 25,
+    no: 1, id: 'stego_herd', name: 'ステゴサウルスの群れ', rarity: 'よくいる', radius: 380, eye: 25,
     desc: '背板を並べた四足の草食恐竜。開けた川辺で草を食み、ゆっくり歩いている。',
     en: { name: 'A herd of Stegosaurus', desc: 'Four-legged plant eaters with plates along the back. They graze by the river and walk slowly.', rarity: 'common' },
     spawn: { kind: 'herd', species: 'stego' },
     cue: { color: 0x6d5238, radius: 150, strength: 0.85 },       // 踏み荒らされた地面
   },
   {
-    id: 'volcano', name: '噴煙を上げる山', rarity: 'ときどき', radius: 1100, eye: 260,
+    no: 6, id: 'volcano', name: '噴煙を上げる山', rarity: 'ときどき', radius: 1100, eye: 260,
     desc: '山頂がくぼみ、灰色の煙が風下へ長く流れている。遠くからでも位置が分かる。',
     en: { name: 'A smoking mountain', desc: 'The summit is hollowed out and grey smoke drifts downwind. You can see it from far away.', rarity: 'uncommon' },
     spawn: { kind: 'volcano' },
   },
   {
-    id: 'summit', name: '高い山の頂', rarity: 'よくある', radius: 700, eye: 160,
+    no: 7, id: 'summit', name: '高い山の頂', rarity: 'よくある', radius: 700, eye: 160,
     desc: '雲底より高くそびえ、越えることができない。回り込むしかない。',
     en: { name: 'A high summit', desc: 'Higher than the cloudbase and impossible to cross. You have to go around.', rarity: 'common' },
     spawn: { kind: 'peak' },
   },
   {
-    id: 'oxbow', name: '大きく曲がる川', rarity: 'よくある', radius: 420, eye: 8,
+    no: 8, id: 'oxbow', name: '大きく曲がる川', rarity: 'よくある', radius: 420, eye: 8,
     desc: '氾濫原を蛇行する川。内側に砂が溜まり、外側が深くえぐれている。',
     en: { name: 'A great bend in the river', desc: 'The river meanders across the floodplain, sand inside the bend, deep water outside.', rarity: 'common' },
     spawn: {
@@ -90,7 +90,7 @@ export const DISCOVERIES = [
     },
   },
   {
-    id: 'nest', name: '営巣地', rarity: 'まれ', radius: 260, eye: 8,
+    no: 9, id: 'nest', name: '営巣地', rarity: 'まれ', radius: 260, eye: 8,
     desc: '乾いた土に掘られた浅いくぼみが並び、卵が寄せ集められている。親の姿は見当たらない。',
     en: { name: 'A nesting ground', desc: 'Shallow hollows dug in dry earth, eggs gathered together. No parent in sight.', rarity: 'rare' },
     spawn: {
@@ -105,7 +105,7 @@ export const DISCOVERIES = [
     model: { build: 'nest', scale: 3.5, draw: 1800 },             // 形はその場で作る(GLB不要)
   },
   {
-    id: 'lone_tree', name: 'ひときわ大きな木', rarity: 'ときどき', radius: 300, eye: 40,
+    no: 10, id: 'lone_tree', name: 'ひときわ大きな木', rarity: 'ときどき', radius: 300, eye: 40,
     desc: '林から離れて一本だけ立つ大木。まわりに背の高い木がなく、遠目にも目立つ。',
     en: { name: 'A lone great tree', desc: 'One big tree standing apart from the forest, with nothing tall around it.', rarity: 'uncommon' },
     spawn: {
@@ -118,7 +118,7 @@ export const DISCOVERIES = [
     model: { url: 'models/veg/conifer_lod0.glb', scale: 5, draw: 2600 },    // Astra製GLBはこの形式で足す(原型7.8m -> 39m)
   },
   {
-    id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340, eye: 12,
+    no: 2, id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340, eye: 12,
     desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁を数頭で歩き、時どき立ち止まる。',
     en: { name: 'A group of Dryosaurus', desc: 'Small two-legged plant eaters, russet backs and sandy bellies. They walk the forest edge and stop now and then.', rarity: 'uncommon' },
     // 群れは world.js の SPECIES.dryo が世界に配っている。ここでは「発見できる」ことだけを書く
@@ -126,29 +126,38 @@ export const DISCOVERIES = [
     cue: { color: 0x7a6a42, radius: 80, strength: 0.55 },                     // 食み跡の薄い土
   },
   {
-    id: 'tricera_herd', name: 'トリケラトプスの群れ', rarity: 'ときどき', radius: 420, eye: 28,
+    no: 3, id: 'tricera_herd', name: 'トリケラトプスの群れ', rarity: 'ときどき', radius: 420, eye: 28,
     desc: '三本の角と大きな襟飾りを持つ四足の草食恐竜。乾いた開けた台地を、隊列のように並んで歩く。',
     en: { name: 'A herd of Triceratops', desc: 'Four-legged plant eaters with three horns and a wide frill. They cross the dry plateau almost in file.', rarity: 'uncommon' },
     spawn: { kind: 'herd', species: 'tricera' },
     cue: { color: 0x8a6b45, radius: 130, strength: 0.7 },                     // 踏み荒らされた乾いた土
   },
   {
-    id: 'brachio_group', name: 'ブラキオサウルス', rarity: 'まれ', radius: 900, eye: 45,
+    no: 4, id: 'brachio_group', name: 'ブラキオサウルス', rarity: 'まれ', radius: 900, eye: 45,
     desc: '首を高く上げた巨大な四足の草食恐竜。全長69m・高さ42m。川沿いの低地をゆっくり歩き、遠くからでも見つかる。',
     en: { name: 'Brachiosaurus', desc: 'A huge four-legged plant eater with its neck held high. 69m long, 42m tall. It walks the lowland by the river and shows from far off.', rarity: 'rare' },
     spawn: { kind: 'herd', species: 'brachio' },
     cue: { color: 0x6f6244, radius: 190, strength: 0.6 },
   },
   {
-    id: 'allo', name: 'アロサウルス', rarity: 'まれ', radius: 380, eye: 30,
+    no: 5, id: 'allo', name: 'アロサウルス', rarity: 'まれ', radius: 380, eye: 30,
     desc: '大きな頭と鋭い歯を持つ二足の捕食者。単独か二頭で、草食の群れから少し離れた開けた所を歩いている。',
     en: { name: 'Allosaurus', desc: 'A two-legged hunter with a big head and sharp teeth. One or two of them, out in the open a little away from the herds.', rarity: 'rare' },
     spawn: { kind: 'herd', species: 'allo' },
     cue: { color: 0x5f5138, radius: 70, strength: 0.65 },
   },
+  {
+    no: 11, id: 'trex', name: 'ティラノサウルス', rarity: 'まれ', radius: 420, eye: 40,
+    desc: '大きな箱のような頭と、小さな二本指の腕。いつも一頭で、トリケラトプスのいる乾いた台地を歩いている。',
+    en: { name: 'Tyrannosaurus', desc: 'A huge boxy head and tiny two-fingered arms. Always alone, walking the dry plateau where the Triceratops roam.', rarity: 'rare' },
+    spawn: { kind: 'herd', species: 'trex' },
+    cue: { color: 0x5a4028, radius: 80, strength: 0.65 },
+  },
 ];
 
 export const BY_ID = Object.fromEntries(DISCOVERIES.map(d => [d.id, d]));
+// ずかんの並び。番号順。足せばそのぶんずかんも増える(番号は書いたものをそのまま使う)
+export const DEX = [...DISCOVERIES].sort((a, b) => (a.no || 99) - (b.no || 99));
 
 // ---------- 近くの発見対象を出す ----------
 export class DiscoverySites {

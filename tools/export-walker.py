@@ -1,7 +1,7 @@
 """Astraのリグ付き恐竜から、歩き(Walk)と待機(Idle)を作ってゲーム用のGLBを書き出す。
 blender -b --factory-startup <rigged.blend> --python tools/export-walker.py -- <種類> <出力.glb> [三角形の目標]
 
-種類は下の SPECIES の名前(dryo / allo / tricera / brachio)。
+種類は下の SPECIES の名前(dryo / allo / trex / tricera / brachio)。
 Astraのリグには歩きが入っていないので、足のIK操作骨を動かしてここで作る。
 
 共通の決まり
@@ -31,6 +31,12 @@ SPECIES = {
         feet=[('CTRL_Foot.L', 0.0), ('CTRL_Foot.R', 0.5)],
         arms=[('Arm.L', 0.0), ('Arm.R', 0.5)], neck=2, tail=4,
         bob=0.055, sway=0.045, tailAmp=[3.0, 4.5, 6.5, 9.0],
+    ),
+    'trex': dict(  # アロと同じ座標系で作った(全長8.3)。ゲーム側で x1.48 して12.3m。腕は小さいので振らない
+        stride=1.15, cycle=54, lift=0.22, duty=0.5,
+        feet=[('CTRL_Foot.L', 0.0), ('CTRL_Foot.R', 0.5)],
+        arms=[], neck=2, tail=4,
+        bob=0.060, sway=0.050, tailAmp=[2.5, 4.0, 6.0, 8.5],
     ),
     'tricera': dict(  # 全長8.0m 四足
         stride=0.9, cycle=48, lift=0.16, duty=0.7,

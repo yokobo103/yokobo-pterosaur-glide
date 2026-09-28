@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { browserPath } from './browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = process.argv.includes('--public');
@@ -27,6 +28,9 @@ if (!PUBLIC) {
   base = 'http://127.0.0.1:8142/';
 }
 console.log('検査の対象:', base);
+// 使えるブラウザを先に1つ決めて、全部の検査に渡す(同梱のChromeが止められることがある)
+const EXE = await browserPath();
+if (!EXE) console.log('  (ブラウザが見つからない。puppeteer に任せます)');
 
 const CHECKS = [
 
@@ -39,6 +43,7 @@ const CHECKS = [
   ['押しても文字が選択されない', 'check-noselect.mjs', []],
   ['着地の動き',             'check-landing.mjs', []],
   ['記録とランキング',       'check-records.mjs', []],
+  ['ずかん',                 'check-dex.mjs', []],
 
   ['ステゴサウルス',         'check-stego.mjs', []],
   ['他の翼竜',               'check-flyers.mjs', []],
@@ -54,7 +59,9 @@ const PAR = Number(process.env.GLIDE_PAR || 2);   // 4本だと互いに遅く�
 const SOLO = [['地面の継ぎ目', 'check-ground.mjs', []]];
 const run = ([name, file, args]) => new Promise(resolve => {
   const t0 = Date.now();
-  const c = spawn(process.execPath, [path.join(ROOT, 'tools', file), ...args], { env: { ...process.env, GLIDE_BASE: base } });
+  const env = { ...process.env, GLIDE_BASE: base };
+  if (EXE) env.PUPPETEER_EXECUTABLE_PATH = EXE;
+  const c = spawn(process.execPath, [path.join(ROOT, 'tools', file), ...args], { env });
   let out = '';
   c.stdout.on('data', d => out += d); c.stderr.on('data', d => out += d);
   const timer = setTimeout(() => c.kill(), 900000);

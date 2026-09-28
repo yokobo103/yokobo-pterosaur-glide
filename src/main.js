@@ -2,7 +2,7 @@ import { Terrain, ThermalField, TUNE, WORLDS, HERD, SPECIES } from './world.js';
 import { Glider, Autopilot, AIR, sunlight } from './flight.js';
 import { View, CAMS, SIZES, LIGHT, SURFACE } from './scene.js';
 import { Vario } from './audio.js';
-import { BY_ID } from './discoveries.js';
+import { BY_ID, DEX } from './discoveries.js';
 import { t, pick, getLang, setLang } from './i18n.js';
 
 const q = new URLSearchParams(location.search);
@@ -36,6 +36,7 @@ const ui = {
   rankClose: el('rankClose'), seasonTag: el('seasonTag'), intro: el('intro'), lang: el('lang'),
   start: el('start'), go: el('go'),
   howto: el('howto'), howtoBtn: el('howtoBtn'), howtoClose: el('howtoClose'),
+  dex: el('dex'), dexBtn: el('dexBtn'), dexClose: el('dexClose'), dexList: el('dexList'), dexCount: el('dexCount'),
   settings: el('settings'), setBtn: el('setBtn'), setClose: el('setClose'),
 };
 
@@ -55,7 +56,7 @@ const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 if (!q.has('nodinos')) view.stegos.load(import.meta.env.BASE_URL + 'models/stego.glb').catch(e => console.error('ステゴサウルスの読み込みに失敗', e));   // ?nodinos で無し
 if (!q.has('nodinos')) view.dryos.load(import.meta.env.BASE_URL + 'models/dryo.glb').catch(e => console.error('ドリオサウルスの読み込みに失敗', e));
-if (!q.has('nodinos')) for (const [k, f] of [['triceras', 'tricera'], ['brachios', 'brachio'], ['allos', 'allo']]) {
+if (!q.has('nodinos')) for (const [k, f] of [['triceras', 'tricera'], ['brachios', 'brachio'], ['allos', 'allo'], ['trexes', 'trex']]) {
   view[k].load(import.meta.env.BASE_URL + `models/${f}.glb`).catch(e => console.error(f + 'の読み込みに失敗', e));
 }
 if (q.has('nowater')) view.water.visible = false;          // 調査用: 水の板を消す
@@ -74,6 +75,8 @@ for (const b of camButtons) b.addEventListener('click', () => pickCam(b.dataset.
 for (const b of camButtons) b.setAttribute('aria-checked', String(b.dataset.cam === CAM_KEY));
 // 遊び方と設定。タイトルの上に重ねて出す
 const sheet = (node, on) => node.classList.toggle('hidden', !on);
+ui.dexBtn.addEventListener('click', () => { renderDex(); sheet(ui.dex, true); });
+ui.dexClose.addEventListener('click', () => sheet(ui.dex, false));
 ui.howtoBtn.addEventListener('click', () => sheet(ui.howto, true));
 ui.howtoClose.addEventListener('click', () => sheet(ui.howto, false));
 // 設定を開いている間は、選んだカメラをそのまま見せる(違いが分かる)。閉じたらタイトルの見せ方へ戻す
@@ -230,10 +233,12 @@ function applyLang() {
   el('tagline').textContent = t('tagline');
   el('goLabel').textContent = t('start');
   el('howtoLabel').textContent = el('howtoTitle').textContent = t('howto');
+  el('dexLabel').textContent = el('dexTitle').textContent = t('dex');
   el('setLabel').textContent = el('setTitle').textContent = t('settings');
   el('camLabel').textContent = t('camLabel');
   el('camNote').textContent = t('camNote');
-  ui.howtoClose.textContent = ui.setClose.textContent = t('back');
+  ui.howtoClose.textContent = ui.setClose.textContent = ui.dexClose.textContent = t('back');
+  renderDex();
   for (const b of document.querySelectorAll('#cams button')) b.textContent = t('cam' + b.dataset.cam.toUpperCase());
   document.querySelectorAll('.stat span')[0].textContent = t('hudDist');
   document.querySelectorAll('.stat span')[1].textContent = t('hudAlt');
@@ -335,6 +340,18 @@ function scanDiscoveries(dt) {
   }
 }
 
+// ずかん。出会ったものだけ名前と説明を出し、出会っていないものは番号と ??? だけ。
+// 並びと番号は discoveries.js の no。発見できるものを足せば、ずかんもそのぶん増える
+function renderDex() {
+  ui.dexList.innerHTML = DEX.map(d => {
+    const no = String(d.no || 0).padStart(2, '0');
+    if (!foundAll.has(d.id)) return `<li class="unseen"><i>${no}</i><div><b>${t('dexUnknown')}</b><p>${t('dexNotYet')}</p></div></li>`;
+    return `<li class="seen"><i>${no}</i><div><b>${esc(pick(d, 'name'))}</b><u>${pick(d, 'rarity')}</u>` +
+           `<p>${pick(d, 'desc')}</p></div></li>`;
+  }).join('');
+  ui.dexCount.textContent = t('dexCount', DEX.filter(d => foundAll.has(d.id)).length, DEX.length);
+}
+
 function renderFoundList() {
   if (!found.length) { ui.foundList.innerHTML = `<div class="none">${t('foundNone')}</div>`; return; }
   const seen = new Map();
@@ -418,7 +435,7 @@ window.__slice = {
   forestReady: () => view.forest.ready,
   stegoReady: () => view.stegos.ready,
   dryoReady: () => view.dryos.ready,
-  dinosReady: () => view.stegos.ready && view.dryos.ready && view.triceras.ready && view.brachios.ready && view.allos.ready,
+  dinosReady: () => view.stegos.ready && view.dryos.ready && view.triceras.ready && view.brachios.ready && view.allos.ready && view.trexes.ready,
   herdTune: o => Object.assign(HERD, o),
   herdScale: () => HERD.scale,
   speciesTune: (kind = 'stego', o) => Object.assign(SPECIES[kind], o || {}),   // 検査用: 種類ごとの設定を見る/変える
@@ -435,7 +452,7 @@ window.__slice = {
   }),
   // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
   creatures: (kind = 'stego', bones = ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot']) =>
-    view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos' }[kind] || 'stegos'].pool.filter(p => p.animal).map(p => {
+    view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes' }[kind] || 'stegos'].pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };
     const a = p.animal;
     const head = w(bones[0]), tail = w(bones[1]);
@@ -450,7 +467,7 @@ window.__slice = {
   }),
   stegos: () => window.__slice.creatures('stego'),
   dryos: () => window.__slice.creatures('dryo', ['Head', 'Tail04', 'LegLFoot', 'LegRFoot']),
-  herdsNear: (x, y, r, kind = 'stego') => [...view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos' }[kind] || 'stegos'].herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
+  herdsNear: (x, y, r, kind = 'stego') => [...view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes' }[kind] || 'stegos'].herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
   trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),

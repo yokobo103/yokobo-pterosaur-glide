@@ -6,7 +6,11 @@ const KINDS = [
   { id: 'tricera', name: 'トリケラトプス', found: 'tricera_herd', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 90 },
   { id: 'brachio', name: 'ブラキオサウルス', found: 'brachio_group', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 220 },
   { id: 'allo', name: 'アロサウルス', found: 'allo', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 90, warm: 10, rec: 18 },
+  { id: 'trex', name: 'ティラノサウルス', found: 'trex', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 120, warm: 10, rec: 45 },
 ];
+// --only=trex,allo で種類を絞る(1種あたり数分かかるので、足した種だけ先に見るとき用)
+const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
+if (ONLY.length) KINDS.splice(0, KINDS.length, ...KINDS.filter(k => ONLY.includes(k.id)));
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 900000, args: ['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
 const p = await b.newPage(); await p.setViewport({ width: 390, height: 844 });
 const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
@@ -53,10 +57,14 @@ for (const k of KINDS) {
     }
     for (let f = 0; f < k.bones.length - 2; f++) {
       const ys = seq.map(a => (a.feet[f] ? a.feet[f][1] - a.ground : NaN));
-      const low = Math.min(...ys.filter(v => !Number.isNaN(v)));
+      const fin = ys.filter(v => !Number.isNaN(v));
+      const low = Math.min(...fin), hi = Math.max(...fin);
+      // 接地とみなす幅。6cm固定だと大きい種で標本がほとんど取れず、残った数コマが雑音になっていた
+      // (ティラノで1525コマ中46コマ)。足が上下する幅の下から12%を接地とみなす
+      const win = Math.max(0.06, 0.12 * (hi - low));
       for (let i = 1; i < seq.length; i++) {
         if (seq[i].state !== 'walk' || seq[i - 1].state !== 'walk') continue;
-        if (!(ys[i] - low < 0.06) || !(ys[i - 1] - low < 0.06)) continue;
+        if (!(ys[i] - low < win) || !(ys[i - 1] - low < win)) continue;
         const a0 = seq[i - 1].feet[f], a1 = seq[i].feet[f];
         const v = Math.hypot(a1[0] - a0[0], a1[2] - a0[2]) / dt;
         if (Math.abs(seq[i].head - seq[i - 1].head) / dt > STRAIGHT) turning.push(v);   // 旋回中は足が横に振られる
