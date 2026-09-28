@@ -6,7 +6,7 @@ const KINDS = [
   { id: 'tricera', name: 'トリケラトプス', found: 'tricera_herd', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 90 },
   { id: 'brachio', name: 'ブラキオサウルス', found: 'brachio_group', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 220 },
   { id: 'allo', name: 'アロサウルス', found: 'allo', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 90, warm: 10, rec: 18 },
-  { id: 'trex', name: 'ティラノサウルス', found: 'trex', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 120, warm: 10, rec: 45 },
+  { id: 'trex', name: 'ティラノサウルス', found: 'trex', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 120, warm: 10, rec: 18 },
 ];
 // --only=trex,allo で種類を絞る(1種あたり数分かかるので、足した種だけ先に見るとき用)
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);

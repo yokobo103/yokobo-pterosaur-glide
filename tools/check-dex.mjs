@@ -34,12 +34,46 @@ await tap('#dexBtn');
 check('ずかんが開く', !(await p.$eval('#dex', e => e.classList.contains('hidden'))));
 const empty = await dexState();
 console.log(`  はじめ: ${empty.count} / ${empty.rows.length}件 / 先頭 ${empty.rows[0].no} ${empty.rows[0].name}`);
-check('発見できるものの数だけ並ぶ', empty.rows.length >= 10);
+check('発見できるものの数だけ並ぶ', empty.rows.length >= 6);
 check('番号が01から連番', empty.rows.map(r => r.no).join(',') === empty.rows.map((_, i) => String(i + 1).padStart(2, '0')).join(','));
 check('出会っていないものは ???', empty.rows.every(r => r.name === '???' && r.seen === 'unseen'));
 check('数は 0', /0 \/ \d+/.test(empty.count));
+// スマホで下まで送れるか。最後の行が見えるところまでスクロールできること
+const scroll = await p.evaluate(() => {
+  const pn = document.querySelector('#dex .panel'), last = document.querySelector('#dexList li:last-child');
+  pn.scrollTop = pn.scrollHeight;
+  const r = last.getBoundingClientRect(), close = document.getElementById('dexClose').getBoundingClientRect();
+  return { top: Math.round(pn.getBoundingClientRect().top), bottom: Math.round(pn.getBoundingClientRect().bottom),
+           view: innerHeight, lastBottom: Math.round(r.bottom), closeTop: Math.round(close.top),
+           hidden: Math.round(pn.scrollHeight - pn.clientHeight - pn.scrollTop) };
+});
+console.log(`  板 ${scroll.top}〜${scroll.bottom}px / 画面 ${scroll.view}px / 最後の行の下端 ${scroll.lastBottom} / 閉じるの上端 ${scroll.closeTop}`);
+check('板が画面に収まっている', scroll.top >= 0 && scroll.bottom <= scroll.view);
+check('一番下まで送れる', scroll.hidden <= 1);
+check('最後の行が閉じるボタンに隠れない', scroll.lastBottom <= scroll.closeTop + 1);
+
 await tap('#dexClose');
 check('閉じられる', await p.$eval('#dex', e => e.classList.contains('hidden')));
+
+// 背の低い画面(ブラウザの枠が出ているスマホ)でも、板が収まって下まで送れるか
+await p.setViewport({ width: 360, height: 520, isMobile: true, hasTouch: true });
+await new Promise(r => setTimeout(r, 300));
+for (const [open, close, name] of [['#howtoBtn', '#howtoClose', '遊び方'], ['#dexBtn', '#dexClose', 'ずかん']]) {
+  await tap(open);
+  const m = await p.evaluate(sel => {
+    const pn = document.querySelector(sel);
+    pn.scrollTop = pn.scrollHeight;
+    const r = pn.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), view: innerHeight,
+             hidden: Math.round(pn.scrollHeight - pn.clientHeight - pn.scrollTop) };
+  }, open === '#dexBtn' ? '#dex .panel' : '#howto .panel');
+  console.log(`  ${name}(360x520): 板 ${m.top}〜${m.bottom}px / 画面 ${m.view}px / 送り残し ${m.hidden}px`);
+  check(`${name}が背の低い画面に収まる`, m.top >= 0 && m.bottom <= m.view + 1);
+  check(`${name}を一番下まで送れる`, m.hidden <= 1);
+  await tap(close);
+}
+await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+await new Promise(r => setTimeout(r, 300));
 
 // ---- 1つ出会う(ブラキオサウルスのそばを低く通る) ----
 await p.goto(`${BASE}?harness&seed=5&cam=a`, { waitUntil: 'networkidle0', timeout: 120000 });

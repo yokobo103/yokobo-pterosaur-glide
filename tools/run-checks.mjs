@@ -44,6 +44,7 @@ const CHECKS = [
   ['着地の動き',             'check-landing.mjs', []],
   ['記録とランキング',       'check-records.mjs', []],
   ['ずかん',                 'check-dex.mjs', []],
+  ['ポーズ',                 'check-pause.mjs', []],
 
   ['ステゴサウルス',         'check-stego.mjs', []],
   ['他の翼竜',               'check-flyers.mjs', []],
@@ -64,7 +65,8 @@ const run = ([name, file, args]) => new Promise(resolve => {
   const c = spawn(process.execPath, [path.join(ROOT, 'tools', file), ...args], { env });
   let out = '';
   c.stdout.on('data', d => out += d); c.stderr.on('data', d => out += d);
-  const timer = setTimeout(() => c.kill(), 900000);
+  // 15分だと、別の重い作業(Blender・スライサー)と重なった回に中身は通っているのに打ち切られた(2026-09-29)
+  const timer = setTimeout(() => c.kill(), 25 * 60 * 1000);
   c.on('close', status => {
     clearTimeout(timer);
     const fails = (out.match(/FAIL/g) || []).length;

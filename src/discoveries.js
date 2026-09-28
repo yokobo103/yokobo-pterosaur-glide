@@ -64,60 +64,6 @@ export const DISCOVERIES = [
     cue: { color: 0x6d5238, radius: 150, strength: 0.85 },       // 踏み荒らされた地面
   },
   {
-    no: 6, id: 'volcano', name: '噴煙を上げる山', rarity: 'ときどき', radius: 1100, eye: 260,
-    desc: '山頂がくぼみ、灰色の煙が風下へ長く流れている。遠くからでも位置が分かる。',
-    en: { name: 'A smoking mountain', desc: 'The summit is hollowed out and grey smoke drifts downwind. You can see it from far away.', rarity: 'uncommon' },
-    spawn: { kind: 'volcano' },
-  },
-  {
-    no: 7, id: 'summit', name: '高い山の頂', rarity: 'よくある', radius: 700, eye: 160,
-    desc: '雲底より高くそびえ、越えることができない。回り込むしかない。',
-    en: { name: 'A high summit', desc: 'Higher than the cloudbase and impossible to cross. You have to go around.', rarity: 'common' },
-    spawn: { kind: 'peak' },
-  },
-  {
-    no: 8, id: 'oxbow', name: '大きく曲がる川', rarity: 'よくある', radius: 420, eye: 8,
-    desc: '氾濫原を蛇行する川。内側に砂が溜まり、外側が深くえぐれている。',
-    en: { name: 'A great bend in the river', desc: 'The river meanders across the floodplain, sand inside the bend, deep water outside.', rarity: 'common' },
-    spawn: {
-      kind: 'cell', cell: 4200, chance: 0.75, salt: 17,
-      pick: (ctx, x, y) => {
-        const t = ctx.terrain;
-        const bend = Math.abs(t.riverX(y + 500) - t.riverX(y - 500));
-        // 川筋の地面は水面より40〜60m高いので、高さでは判定できない。湿り気で川沿いを見る
-        return bend > 250 && Math.abs(x - t.riverX(y)) < 260 && t.moisture(x, y) > 0.5;
-      },
-    },
-  },
-  {
-    no: 9, id: 'nest', name: '営巣地', rarity: 'まれ', radius: 260, eye: 8,
-    desc: '乾いた土に掘られた浅いくぼみが並び、卵が寄せ集められている。親の姿は見当たらない。',
-    en: { name: 'A nesting ground', desc: 'Shallow hollows dug in dry earth, eggs gathered together. No parent in sight.', rarity: 'rare' },
-    spawn: {
-      kind: 'cell', cell: 5200, chance: 0.6, salt: 91,
-      pick: (ctx, x, y) => {
-        const t = ctx.terrain;
-        const h = t.height(x, y);
-        return h > t.water + 4 && t.slope(x, y, 25) < 0.1 && t.moisture(x, y) < 0.42 && t.grove(x, y) < 0.42;
-      },
-    },
-    cue: { color: 0xbba077, radius: 70, strength: 0.8 },          // 踏み固められた明るい土
-    model: { build: 'nest', scale: 3.5, draw: 1800 },             // 形はその場で作る(GLB不要)
-  },
-  {
-    no: 10, id: 'lone_tree', name: 'ひときわ大きな木', rarity: 'ときどき', radius: 300, eye: 40,
-    desc: '林から離れて一本だけ立つ大木。まわりに背の高い木がなく、遠目にも目立つ。',
-    en: { name: 'A lone great tree', desc: 'One big tree standing apart from the forest, with nothing tall around it.', rarity: 'uncommon' },
-    spawn: {
-      kind: 'cell', cell: 3600, chance: 0.7, salt: 53,
-      pick: (ctx, x, y) => {
-        const t = ctx.terrain;
-        return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.14 && t.grove(x, y) < 0.36;
-      },
-    },
-    model: { url: 'models/veg/conifer_lod0.glb', scale: 5, draw: 2600 },    // Astra製GLBはこの形式で足す(原型7.8m -> 39m)
-  },
-  {
     no: 2, id: 'dryo_group', name: 'ドリオサウルスの一団', rarity: 'ときどき', radius: 340, eye: 12,
     desc: '赤茶の背と砂色の腹をした二足の小型草食恐竜。林の縁を数頭で歩き、時どき立ち止まる。',
     en: { name: 'A group of Dryosaurus', desc: 'Small two-legged plant eaters, russet backs and sandy bellies. They walk the forest edge and stop now and then.', rarity: 'uncommon' },
@@ -147,17 +93,45 @@ export const DISCOVERIES = [
     cue: { color: 0x5f5138, radius: 70, strength: 0.65 },
   },
   {
-    no: 11, id: 'trex', name: 'ティラノサウルス', rarity: 'まれ', radius: 420, eye: 40,
+    no: 6, id: 'trex', name: 'ティラノサウルス', rarity: 'まれ', radius: 420, eye: 40,
     desc: '大きな箱のような頭と、小さな二本指の腕。いつも一頭で、トリケラトプスのいる乾いた台地を歩いている。',
     en: { name: 'Tyrannosaurus', desc: 'A huge boxy head and tiny two-fingered arms. Always alone, walking the dry plateau where the Triceratops roam.', rarity: 'rare' },
     spawn: { kind: 'herd', species: 'trex' },
     cue: { color: 0x5a4028, radius: 80, strength: 0.65 },
   },
+  // ---------- 景色として置くだけのもの ----------
+  // scenery: true は「世界には出るが、発見にもずかんにも入らない」印。
+  // 恐竜以外を発見にすると何を探す遊びなのか分かりにくかったので、置物に戻した(所長 2026-09-28)
+  {
+    scenery: true, id: 'nest', name: '営巣地',
+    spawn: {
+      kind: 'cell', cell: 5200, chance: 0.6, salt: 91,
+      pick: (ctx, x, y) => {
+        const t = ctx.terrain;
+        const h = t.height(x, y);
+        return h > t.water + 4 && t.slope(x, y, 25) < 0.1 && t.moisture(x, y) < 0.42 && t.grove(x, y) < 0.42;
+      },
+    },
+    cue: { color: 0xbba077, radius: 70, strength: 0.8 },          // 踏み固められた明るい土
+    model: { build: 'nest', scale: 3.5, draw: 1800 },             // 形はその場で作る(GLB不要)
+  },
+  {
+    scenery: true, id: 'lone_tree', name: 'ひときわ大きな木',
+    spawn: {
+      kind: 'cell', cell: 3600, chance: 0.7, salt: 53,
+      pick: (ctx, x, y) => {
+        const t = ctx.terrain;
+        return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.14 && t.grove(x, y) < 0.36;
+      },
+    },
+    model: { url: 'models/veg/conifer_lod0.glb', scale: 5, draw: 2600 },    // Astra製GLB(原型7.8m -> 39m)
+  },
 ];
 
 export const BY_ID = Object.fromEntries(DISCOVERIES.map(d => [d.id, d]));
 // ずかんの並び。番号順。足せばそのぶんずかんも増える(番号は書いたものをそのまま使う)
-export const DEX = [...DISCOVERIES].sort((a, b) => (a.no || 99) - (b.no || 99));
+// scenery のものは入れない(置物であって、発見の対象ではない)
+export const DEX = DISCOVERIES.filter(d => !d.scenery).sort((a, b) => (a.no || 99) - (b.no || 99));
 
 // ---------- 近くの発見対象を出す ----------
 export class DiscoverySites {

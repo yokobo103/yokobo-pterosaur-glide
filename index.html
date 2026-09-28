@@ -40,8 +40,10 @@
   #varioFill { position:absolute; left:0; right:0; top:50%; height:0; background:#7fe08a; transition:none; }
   #varioZero { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.55); }
   /* 走行の終わり。背景に埋もれて読めなかったので、1枚の板にまとめる */
-  #msg { z-index:2; position:fixed; inset:0; display:grid; place-items:center; color:#fff; pointer-events:none; padding:16px; }
-  #msg .panel { pointer-events:auto; width:min(92vw,26rem); max-height:86vh; overflow-y:auto; text-align:center;
+  #msg { z-index:2; position:fixed; inset:0; height:100dvh; display:grid; place-items:center; color:#fff; pointer-events:none;
+         padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 12px); }
+  #msg .panel { pointer-events:auto; width:min(92vw,26rem); max-height:100%; overflow-y:auto;
+                overscroll-behavior:contain; -webkit-overflow-scrolling:touch; text-align:center;
                 background:rgba(8,11,16,.8); border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:18px 16px; }
   #msg b { font-size:26px; display:block; }
   #msg span { font-size:13px; opacity:.8; }
@@ -71,8 +73,11 @@
   #subBtns svg { width:17px; height:17px; }
   #subBtns i { width:1px; height:26px; background:rgba(255,255,255,.3); }
   /* 遊び方・設定の中身 */
-  .sheet { z-index:10; position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
-  .sheet .panel { width:min(94vw,27rem); max-height:88vh; overflow-y:auto; text-align:center;
+  .sheet { z-index:10; position:fixed; inset:0; height:100dvh; display:grid; place-items:center;
+            padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 12px);
+            background:rgba(4,6,10,.72); color:#fff; }
+  .sheet .panel { width:min(94vw,27rem); max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+                  -webkit-overflow-scrolling:touch; text-align:center;
                   background:rgba(8,11,16,.94); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:18px 16px; }
   .sheet h2 { font-size:15px; font-weight:650; margin-bottom:12px; }
   .sheet p { font-size:13px; line-height:1.85; opacity:.85; }
@@ -81,6 +86,27 @@
   .sheet .note { font-size:11px; opacity:.6; margin-top:10px; line-height:1.7; }
   .sheet .close { margin-top:18px; padding:11px 30px; font-size:14px; border:0; border-radius:999px;
                   background:rgba(255,255,255,.14); color:#e8eef7; font-weight:650; }
+  /* とめるボタン。左右の操作はcanvasに直付けなので、この上を押しても曲がらない。
+     キョリ(左上)とタカサ(右上)の間の空きに置く */
+  #pauseBtn { position:fixed; z-index:4; top:calc(env(safe-area-inset-top) + 14px); left:50%; transform:translateX(-50%);
+              width:46px; height:46px; display:grid; place-items:center; border-radius:50%;
+              border:1px solid rgba(255,255,255,.35); background:rgba(10,14,20,.45); color:#e8eef7; }
+  #pauseBtn svg { width:20px; height:20px; }
+  /* ポーズ画面。ずかんと設定はこの上に重ねるので、少し下の層に置く */
+  #pause { z-index:9; }
+  #pauseStat { display:flex; justify-content:center; gap:26px; margin-bottom:16px; }
+  #pauseStat b { display:block; font-size:28px; font-weight:650; font-variant-numeric:tabular-nums; }
+  #pauseStat span { font-size:11px; opacity:.6; letter-spacing:.09em; }
+  #pause .main { display:block; width:100%; padding:15px 0; font-size:16px; font-weight:700; border:0;
+                 border-radius:999px; background:#eef3f9; color:#10151d; letter-spacing:.05em; }
+  #pauseBtns { display:flex; gap:8px; margin-top:10px; }
+  #pauseBtns button { flex:1; padding:12px 0; font-size:14px; font-weight:650; border:0; border-radius:999px;
+                      background:rgba(255,255,255,.14); color:#e8eef7; }
+  /* やめる側は、つづけるとはっきり分けて下に小さく置く(誤って走行を捨てないように) */
+  #pauseQuit { display:flex; justify-content:center; gap:18px; margin-top:20px; padding-top:14px;
+               border-top:1px solid rgba(255,255,255,.12); }
+  #pauseQuit button { padding:8px 14px; font-size:12px; font-weight:600; border:0; background:none;
+                      color:#e8eef7; opacity:.62; }
   /* ずかん。出会っていないものは番号だけ出して ??? にする */
   #dexList { list-style:none; text-align:left; }
   #dexList li { display:flex; gap:10px; align-items:flex-start; padding:9px 2px; border-top:1px solid rgba(255,255,255,.1); }
@@ -93,6 +119,7 @@
   #dexList li.seen i { background:rgba(127,224,138,.22); color:#bdf0c6; }
   #dexList li.unseen b { opacity:.45; letter-spacing:.12em; }
   #dexList li.unseen p { opacity:.35; }
+  #dexList li:last-child { padding-bottom:14px; }
   /* ずかんは長くなるので、閉じるを下に貼り付けておく(下まで送らないと閉じられないのを防ぐ) */
   #dex .close { position:sticky; bottom:-18px; z-index:1; display:block; width:100%; margin:14px 0 0;
                 background:#222a35; box-shadow:0 -6px 0 6px rgba(8,11,16,.97), 0 -18px 18px 10px rgba(8,11,16,.8); }
@@ -122,8 +149,11 @@
                     background:rgba(255,255,255,.14); color:#e8eef7; pointer-events:auto; }
   #endBtns button.main { background:#e8eef7; color:#10151d; }
   /* ランキング。個人と世界をタブで切り替える */
-  #rank { z-index:10; position:fixed; inset:0; display:grid; place-items:center; padding:16px; background:rgba(4,6,10,.72); color:#fff; }
-  #rank .panel { width:min(94vw,28rem); max-height:88vh; overflow-y:auto;
+  #rank { z-index:10; position:fixed; inset:0; height:100dvh; display:grid; place-items:center;
+           padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 12px);
+           background:rgba(4,6,10,.72); color:#fff; }
+  #rank .panel { width:min(94vw,28rem); max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+                 -webkit-overflow-scrolling:touch;
                  background:rgba(8,11,16,.94); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px; }
   #rank h2 { font-size:15px; font-weight:650; margin-bottom:10px; text-align:center; }
   #rankTabs { display:flex; gap:8px; justify-content:center; margin-bottom:12px; }
@@ -225,6 +255,23 @@
   <div id="howto" class="sheet hidden"><div class="panel">
     <h2 id="howtoTitle">遊び方</h2><p id="intro"></p>
     <button id="howtoClose" class="close" type="button">閉じる</button>
+  </div></div>
+  <button id="pauseBtn" class="hidden" type="button" aria-label="とめる">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+  </button>
+  <div id="pause" class="sheet hidden"><div class="panel">
+    <h2 id="pauseTitle">とまっています</h2>
+    <div id="pauseStat"><div><b id="pDist">0.00</b><span id="pDistLabel">キョリ km</span></div>
+      <div><b id="pAlt">0</b><span id="pAltLabel">タカサ m</span></div></div>
+    <button id="resumeBtn" class="main" type="button">つづける</button>
+    <div id="pauseBtns">
+      <button id="pDexBtn" type="button">ずかん</button>
+      <button id="pSetBtn" type="button">設定</button>
+    </div>
+    <div id="pauseQuit">
+      <button id="retryBtn" type="button">やり直し</button>
+      <button id="titleBtn" type="button">タイトルへ</button>
+    </div>
   </div></div>
   <div id="dex" class="sheet hidden"><div class="panel">
     <h2 id="dexTitle">ずかん</h2>

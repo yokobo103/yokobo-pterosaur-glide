@@ -37,6 +37,9 @@ const ui = {
   start: el('start'), go: el('go'),
   howto: el('howto'), howtoBtn: el('howtoBtn'), howtoClose: el('howtoClose'),
   dex: el('dex'), dexBtn: el('dexBtn'), dexClose: el('dexClose'), dexList: el('dexList'), dexCount: el('dexCount'),
+  pause: el('pause'), pauseBtn: el('pauseBtn'), resumeBtn: el('resumeBtn'),
+  pDexBtn: el('pDexBtn'), pSetBtn: el('pSetBtn'), retryBtn: el('retryBtn'), titleBtn: el('titleBtn'),
+  pDist: el('pDist'), pAlt: el('pAlt'),
   settings: el('settings'), setBtn: el('setBtn'), setClose: el('setClose'),
 };
 
@@ -75,6 +78,38 @@ for (const b of camButtons) b.addEventListener('click', () => pickCam(b.dataset.
 for (const b of camButtons) b.setAttribute('aria-checked', String(b.dataset.cam === CAM_KEY));
 // 遊び方と設定。タイトルの上に重ねて出す
 const sheet = (node, on) => node.classList.toggle('hidden', !on);
+
+// ---- とめる ----
+// 押しっぱなしで曲がる操作なので、指を画面に置いたまま止められるようにする。
+// 止めている間は時計も進めない(日が暮れないので、止めても損をしない)。
+let paused = false;
+function setPaused(on) {
+  if (paused === on || ended || demo) return;
+  paused = on;
+  sheet(ui.pause, on);
+  if (on) {
+    ui.pDist.textContent = (Math.max(0, glider.best) / 1000).toFixed(2);
+    ui.pAlt.textContent = Math.round(glider.agl);
+    vario.stop();
+    running = false;
+  } else {
+    sheet(ui.dex, false); sheet(ui.settings, false);
+    keys.clear(); touch.clear();        // 止めている間に離した指を持ち越さない(再開した瞬間に曲がる)
+    vario.start();
+    running = true;
+    last = performance.now();           // 止まっていた分を進めない
+  }
+}
+ui.pauseBtn.addEventListener('click', () => setPaused(true));
+ui.resumeBtn.addEventListener('click', () => setPaused(false));
+ui.pDexBtn.addEventListener('click', () => { renderDex(); sheet(ui.dex, true); });
+ui.retryBtn.addEventListener('click', () => { paused = false; sheet(ui.pause, false); sheet(ui.dex, false); sheet(ui.settings, false); startRun(); });
+ui.titleBtn.addEventListener('click', () => { paused = false; sheet(ui.pause, false); sheet(ui.dex, false); sheet(ui.settings, false); toTitle(); });
+ui.pSetBtn.addEventListener('click', () => sheet(ui.settings, true));
+addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') setPaused(!paused); });
+// 画面を離れたら自動で止める(電話のあと、上昇気流の真ん中で落とされないように)
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });   // documentで起きる
+addEventListener('blur', () => setPaused(true));
 ui.dexBtn.addEventListener('click', () => { renderDex(); sheet(ui.dex, true); });
 ui.dexClose.addEventListener('click', () => sheet(ui.dex, false));
 ui.howtoBtn.addEventListener('click', () => sheet(ui.howto, true));
@@ -223,7 +258,11 @@ ui.rankBtn.addEventListener('click', () => openRank('mine'));
 ui.againBtn.addEventListener('click', () => { closeRank(); reset(); });
 
 // ---- 表示の言葉 ----
-const showHud = () => { el('hud').classList.remove('pre'); el('vario').classList.remove('pre'); };
+const showHud = on => {
+  el('hud').classList.toggle('pre', !on);
+  el('vario').classList.toggle('pre', !on);
+  ui.pauseBtn.classList.toggle('hidden', !on);     // とめるボタンは飛んでいる間だけ
+};
 
 function applyLang() {
   document.documentElement.lang = getLang();
@@ -234,6 +273,14 @@ function applyLang() {
   el('goLabel').textContent = t('start');
   el('howtoLabel').textContent = el('howtoTitle').textContent = t('howto');
   el('dexLabel').textContent = el('dexTitle').textContent = t('dex');
+  el('pauseTitle').textContent = t('paused');
+  el('pDistLabel').textContent = t('hudDist');
+  el('pAltLabel').textContent = t('hudAlt');
+  ui.resumeBtn.textContent = t('resume');
+  ui.pDexBtn.textContent = t('dex');
+  ui.pSetBtn.textContent = t('settings');
+  ui.retryBtn.textContent = t('retry');
+  ui.titleBtn.textContent = t('toTitle');
   el('setLabel').textContent = el('setTitle').textContent = t('settings');
   el('camLabel').textContent = t('camLabel');
   el('camNote').textContent = t('camNote');
@@ -259,6 +306,8 @@ for (const b of ui.lang.querySelectorAll('button')) {
 
 function finish() {
   ended = true; running = false;
+  paused = false; sheet(ui.pause, false);
+  ui.pauseBtn.classList.add('hidden');
   vario.stop();
   ui.msgTitle.textContent = (glider.best / 1000).toFixed(2) + ' km';
   ui.msgSub.textContent = t(sunlight(glider.time) <= 0.02 ? 'endSunset' : 'endLanded');
@@ -321,6 +370,7 @@ function scanDiscoveries(dt) {
   // の二段構えにする(「見ていないのに発見」は起きない)
   let told = false;
   for (const site of view.sites.near(glider.x, glider.y, 3000)) {
+    if (site.type.scenery) continue;          // 置くだけのもの(営巣地・大きな木)は発見にしない
     if (foundKeys.has(site.key)) continue;
     const onNow = view.siteOnScreen(site, site.type.eye || 20, FOUND_PAD);
     if (onNow) seenAt.set(site.key, glider.time);      // 遠くで見えた時点で覚えておく(距離で弾く前に)
@@ -415,14 +465,30 @@ function frame(now) {
   if (!HARNESS) requestAnimationFrame(frame);
 }
 
-ui.go.addEventListener('click', () => {
+// 走行を始める。見本飛行とは別に、まっさらな走行を作り直す
+function startRun() {
   vario.start();
-  ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); showHud();
+  ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); ui.msg.classList.add('hidden');
+  showHud(true);
   demo = false; auto = null;
   view.setCam(camOf(CAM_KEY));              // 遊ぶときのカメラへ戻す
-  reset();                                  // 見本飛行とは別に、まっさらな走行を始める
+  keys.clear(); touch.clear();
+  pending = null;                           // 途中でやめた走行は記録しない(所長の判断)
+  reset();
   last = performance.now();
-});
+}
+// タイトルへ戻る。後ろでまた見本飛行が始まる
+function toTitle() {
+  vario.stop();
+  pending = null;
+  ended = false; running = false;
+  showHud(false);
+  ui.msg.classList.add('hidden');
+  ui.start.classList.remove('hidden'); ui.lang.classList.remove('hidden');
+  demoFlight();
+  last = performance.now();
+}
+ui.go.addEventListener('click', startRun);
 
 
 // ---- 検査用の口。画面が出ない環境でもここから回す ----
@@ -582,7 +648,7 @@ window.__slice = {
   waterY: () => terrain.water,
   _canvas: () => view.renderer.domElement,
   camRoll: () => view.cam.roll,
-  begin() { ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); showHud(); running = true; },
+  begin() { ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); showHud(true); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },
   // 実時間を待たずにn秒ぶん進める
   step(seconds, render = true) {
@@ -624,7 +690,7 @@ window.__slice = {
     groundY: terrain.height(view.landing.x, view.landing.y), bones: ['Head', 'HandL', 'HandR', 'FootL', 'FootR'].map(n => view.boneInfo(n)) } : null,
   boneY: name => { const o = view.model && view.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new o.position.constructor()); return v.y; },
   // 検査用: 近くの発見対象と、今回の発見
-  sites: (rad = 2600) => view.sites.near(glider.x, glider.y, rad).map(s => ({ id: s.type.id, name: s.type.name, key: s.key, x: s.x, y: s.y, d: s.d, radius: s.type.radius })),
+  sites: (rad = 2600) => view.sites.near(glider.x, glider.y, rad).filter(s => !s.type.scenery).map(s => ({ id: s.type.id, name: s.type.name, key: s.key, x: s.x, y: s.y, d: s.d, radius: s.type.radius })),
   found: () => found.map(f => ({ id: f.id, key: f.key, name: f.name, first: f.first })),
   foundVisible: () => ui.found.classList.contains('show') ? ui.foundName.textContent : null,
   foundListText: () => ui.foundList.textContent,
