@@ -7,6 +7,10 @@ const KINDS = [
   { id: 'brachio', name: 'ブラキオサウルス', found: 'brachio_group', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 220 },
   { id: 'allo', name: 'アロサウルス', found: 'allo', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 90, warm: 10, rec: 18 },
   { id: 'trex', name: 'ティラノサウルス', found: 'trex', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 120, warm: 10, rec: 18 },
+  { id: 'spino', name: 'スピノサウルス', found: 'spino', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 140, warm: 10, rec: 18 },
+  { id: 'parasaur', name: 'パラサウロロフス', found: 'parasaur_herd', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 100 },
+  { id: 'raptor', name: 'ヴェロキラプトル', found: 'raptor_pack', bones: ['Head', 'Tail04', 'LegLFoot', 'LegRFoot'], near: 40 },
+  { id: 'ankylo', name: 'アンキロサウルス', found: 'ankylo', bones: ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot'], near: 80, warm: 10, rec: 18 },
 ];
 // --only=trex,allo で種類を絞る(1種あたり数分かかるので、足した種だけ先に見るとき用)
 const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);

@@ -99,6 +99,34 @@ export const DISCOVERIES = [
     spawn: { kind: 'herd', species: 'trex' },
     cue: { color: 0x5a4028, radius: 80, strength: 0.65 },
   },
+  {
+    no: 7, id: 'spino', name: 'スピノサウルス', rarity: 'まれ', radius: 460, eye: 48,
+    desc: 'ワニのような細長い口と、背中の大きな帆。川沿いを一頭か二頭で歩き、帆が遠くからでも目印になる。',
+    en: { name: 'Spinosaurus', desc: 'A long crocodile-like snout and a tall sail on its back. One or two walk along the river; the sail shows from far away.', rarity: 'rare' },
+    spawn: { kind: 'herd', species: 'spino' },
+    cue: { color: 0x5a4a38, radius: 90, strength: 0.6 },
+  },
+  {
+    no: 8, id: 'parasaur_herd', name: 'パラサウロロフスの群れ', rarity: 'よくいる', radius: 400, eye: 30,
+    desc: '頭のうしろへ伸びる長いトサカと、カモのようなくちばし。湿った低地を大きな群れで歩いている。',
+    en: { name: 'A herd of Parasaurolophus', desc: 'A long crest sweeping back from the head and a duck-like bill. Big herds walk the damp lowland.', rarity: 'common' },
+    spawn: { kind: 'herd', species: 'parasaur' },
+    cue: { color: 0x6b6a40, radius: 140, strength: 0.7 },
+  },
+  {
+    no: 9, id: 'raptor_pack', name: 'ヴェロキラプトルの群れ', rarity: 'ときどき', radius: 260, eye: 8,
+    desc: '羽毛におおわれた小さな肉食恐竜。足に大きなかぎ爪。林の縁を数頭でせわしなく歩き回る。',
+    en: { name: 'A pack of Velociraptor', desc: 'Small feathered hunters with a big hooked claw on each foot. A few of them bustle along the forest edge.', rarity: 'uncommon' },
+    spawn: { kind: 'herd', species: 'raptor' },
+    cue: { color: 0x6a5838, radius: 50, strength: 0.5 },
+  },
+  {
+    no: 10, id: 'ankylo', name: 'アンキロサウルス', rarity: 'ときどき', radius: 340, eye: 16,
+    desc: '背中をよろいのような骨の板でおおい、尾の先に大きなこぶ。乾いた開けた所を低く、ゆっくり歩く。',
+    en: { name: 'Ankylosaurus', desc: 'Its back is covered in bony armour and its tail ends in a heavy club. It walks low and slow across dry open ground.', rarity: 'uncommon' },
+    spawn: { kind: 'herd', species: 'ankylo' },
+    cue: { color: 0x7a6040, radius: 80, strength: 0.6 },
+  },
   // ---------- 景色として置くだけのもの ----------
   // scenery: true は「世界には出るが、発見にもずかんにも入らない」印。
   // 恐竜以外を発見にすると何を探す遊びなのか分かりにくかったので、置物に戻した(所長 2026-09-28)

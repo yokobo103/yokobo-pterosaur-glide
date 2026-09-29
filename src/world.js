@@ -443,6 +443,50 @@ export const SPECIES = {
     pick: (t, x, y) => t.height(x, y) > t.water + 5 && t.slope(x, y, 30) < 0.12
                     && t.moisture(x, y) < 0.42 && t.grove(x, y) < 0.45,
   },
+  // 以下4種は 20260929_GlideDinos。二足はアロと同じ座標系(全長8.3)で作ったので scale に倍率を掛ける
+  // 全長14m -> 49m(x1.69)。川沿いを1〜2頭で歩く。背の帆が遠くから見える
+  spino: {
+    cell: 4800, chance: 0.6, min: 1, max: 2, spread: 50,
+    scale: CREATURE_SCALE * 1.69,
+    walk: 1.022,                  // tools/export-walker.py spino の WALK_SPEED
+    timeScale: 1.0,
+    active: 2000, show: 3200, maxShown: 4, farShow: 8000, farMax: 20, farMinPx: 7, salt: 24671, sample: 'river', step: 0.08,
+    // 最初は「水面+10m以内・湿り気0.45以上」で14km以内に1か所しか出なかった
+    pick: (t, x, y) => t.height(x, y) > t.water + 1 && t.height(x, y) < t.water + 18
+                    && t.slope(x, y, 30) < 0.12 && t.moisture(x, y) > 0.38,
+  },
+  // 全長9.5m -> 38m(x1.15)。湿った低地に大きめの群れ。いちばんよく見かける
+  parasaur: {
+    cell: 3000, chance: 0.65, min: 4, max: 8, spread: 90,
+    scale: CREATURE_SCALE * 1.15,
+    walk: 1.056,
+    timeScale: 1.0,
+    active: 1800, show: 2600, maxShown: 12, farShow: 6500, farMax: 80, farMinPx: 5, salt: 40427, sample: 'cell', step: 0.12,
+    pick: (t, x, y) => t.height(x, y) > t.water + 2 && t.slope(x, y, 30) < 0.12
+                    && t.moisture(x, y) > 0.38 && t.grove(x, y) < 0.5,
+  },
+  // 全長2.0m -> 7m(x0.24)。林の縁を3〜5頭の群れで小走り。小さいので速めに歩かせ、向きもすばやく変える
+  raptor: {
+    cell: 3600, chance: 0.5, min: 3, max: 5, spread: 30,
+    scale: CREATURE_SCALE * 0.24,
+    walk: 1.56,
+    timeScale: 1.6,
+    active: 1400, show: 1600, maxShown: 10, farShow: 3000, farMax: 40, farMinPx: 3, salt: 63031, sample: 'cell', step: 0.30,
+    pick: (t, x, y) => {
+      const g = t.grove(x, y);
+      return t.height(x, y) > t.water + 3 && t.slope(x, y, 25) < 0.14 && g > 0.22 && g < 0.5;
+    },
+  },
+  // 全長7m -> 25m(メートルで作ったので倍率なし)。乾いた開けた所を1〜3頭で低く歩く
+  ankylo: {
+    cell: 4000, chance: 0.5, min: 1, max: 3, spread: 50,
+    scale: CREATURE_SCALE,
+    walk: 0.4286,
+    timeScale: 1.0,
+    active: 1800, show: 2400, maxShown: 6, farShow: 5500, farMax: 30, farMinPx: 4, salt: 17209, sample: 'cell', step: 0.10,
+    pick: (t, x, y) => t.height(x, y) > t.water + 4 && t.slope(x, y, 30) < 0.12
+                    && t.moisture(x, y) < 0.45 && t.grove(x, y) < 0.45,
+  },
 };
 
 export class Herds {

@@ -1078,9 +1078,14 @@ export class View {
     this.brachios = new Creatures(terrain, this.scene, SPECIES.brachio, 'ブラキオ', this.renderer);
     this.allos = new Creatures(terrain, this.scene, SPECIES.allo, 'アロ', this.renderer);
     this.trexes = new Creatures(terrain, this.scene, SPECIES.trex, 'ティラノ', this.renderer);
+    this.spinos = new Creatures(terrain, this.scene, SPECIES.spino, 'スピノ', this.renderer);
+    this.parasaurs = new Creatures(terrain, this.scene, SPECIES.parasaur, 'パラサウロ', this.renderer);
+    this.raptors = new Creatures(terrain, this.scene, SPECIES.raptor, 'ラプトル', this.renderer);
+    this.ankylos = new Creatures(terrain, this.scene, SPECIES.ankylo, 'アンキロ', this.renderer);
     this.flyers = new Flyers(terrain, field, this.scene, this.renderer);
     this.sites = new DiscoverySites({ terrain, field, herdsOf: { stego: this.stegos.herds, dryo: this.dryos.herds,
-      tricera: this.triceras.herds, brachio: this.brachios.herds, allo: this.allos.herds, trex: this.trexes.herds } });
+      tricera: this.triceras.herds, brachio: this.brachios.herds, allo: this.allos.herds, trex: this.trexes.herds,
+      spino: this.spinos.herds, parasaur: this.parasaurs.herds, raptor: this.raptors.herds, ankylo: this.ankylos.herds } });
     this.discoveries = new Discoveries(this.sites, this.scene, this.renderer);
     this.plumes = new Plumes(terrain);
     this.scene.add(this.plumes.points); this.plumes.points.userData.part = '噴煙';
@@ -1277,13 +1282,17 @@ export class View {
     // 1m先の1画素が何メートルか。遠くの板の最低の大きさに使う
     const h = this.renderer.domElement.height || 844;
     const mpp = 2 * Math.tan(this.camera.fov * Math.PI / 360) / h;
-    for (const c of [this.stegos, this.dryos, this.triceras, this.brachios, this.allos, this.trexes, this.flyers]) c.mpp = mpp;
+    for (const c of [this.stegos, this.dryos, this.triceras, this.brachios, this.allos, this.trexes, this.spinos, this.parasaurs, this.raptors, this.ankylos, this.flyers]) c.mpp = mpp;
     this.stegos.update(g.x, g.y, dt);
     this.dryos.update(g.x, g.y, dt);
     this.triceras.update(g.x, g.y, dt);
     this.brachios.update(g.x, g.y, dt);
     this.allos.update(g.x, g.y, dt);
     this.trexes.update(g.x, g.y, dt);
+    this.spinos.update(g.x, g.y, dt);
+    this.parasaurs.update(g.x, g.y, dt);
+    this.raptors.update(g.x, g.y, dt);
+    this.ankylos.update(g.x, g.y, dt);
     this.flyers.update(g.x, g.y, dt, g.time);
     this.discoveries.update(g.x, g.y);
     this.dust.update(g.x, g.y, dt, sun);

@@ -38,6 +38,32 @@ SPECIES = {
         arms=[], neck=2, tail=4,
         bob=0.060, sway=0.050, tailAmp=[2.5, 4.0, 6.0, 8.5],
     ),
+    # 以下4種は 20260929_GlideDinos。二足はアロと同じ座標系(全長8.3)で作り、ゲーム側の scale で実寸にする
+    'spino': dict(  # 実物14m(x1.69)。重い大型の歩き
+        stride=1.15, cycle=54, lift=0.22, duty=0.5,
+        feet=[('CTRL_Foot.L', 0.0), ('CTRL_Foot.R', 0.5)],
+        arms=[('Arm.L', 0.0), ('Arm.R', 0.5)], neck=2, tail=4,
+        bob=0.055, sway=0.045, tailAmp=[3.0, 4.5, 6.5, 9.0],
+    ),
+    'parasaur': dict(  # 実物9.5m(x1.15)。二足で歩く草食。尾は高く平たいので振りは小さめ
+        stride=1.1, cycle=50, lift=0.20, duty=0.5,
+        feet=[('CTRL_Foot.L', 0.0), ('CTRL_Foot.R', 0.5)],
+        arms=[('Arm.L', 0.0), ('Arm.R', 0.5)], neck=2, tail=4,
+        bob=0.050, sway=0.040, tailAmp=[2.0, 3.0, 4.5, 6.0],
+    ),
+    'raptor': dict(  # 実物2.0m(x0.24)。軽い小走り。尾はまっすぐ硬いので振らない
+        stride=1.3, cycle=40, lift=0.28, duty=0.5,
+        feet=[('CTRL_Foot.L', 0.0), ('CTRL_Foot.R', 0.5)],
+        arms=[], neck=2, tail=4,
+        bob=0.060, sway=0.035, tailAmp=[1.2, 1.6, 2.0, 2.4],
+    ),
+    'ankylo': dict(  # 実物7m(メートルで作成)。脚が短く低い四足。尾のこぶを振る
+        stride=0.55, cycle=44, lift=0.12, duty=0.7,
+        feet=[('CTRL_Hind.L.Foot', 0.0), ('CTRL_Fore.L.Foot', 0.25),
+              ('CTRL_Hind.R.Foot', 0.5), ('CTRL_Fore.R.Foot', 0.75)],
+        arms=[], neck=2, tail=4,
+        bob=0.025, sway=0.030, tailAmp=[3.0, 4.5, 6.0, 8.0],
+    ),
     'tricera': dict(  # 全長8.0m 四足
         stride=0.9, cycle=48, lift=0.16, duty=0.7,
         feet=[('CTRL_Hind.L.Foot', 0.0), ('CTRL_Fore.L.Foot', 0.25),

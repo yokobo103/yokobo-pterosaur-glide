@@ -62,7 +62,7 @@ const view = new View(el('app'), terrain, field, camOf(CAM_KEY), SIZE);
 if (!q.has('box')) view.loadModel(import.meta.env.BASE_URL + 'models/rh02.glb');   // ?box で灰色の箱のまま
 if (!q.has('nodinos')) view.stegos.load(import.meta.env.BASE_URL + 'models/stego.glb').catch(e => console.error('ステゴサウルスの読み込みに失敗', e));   // ?nodinos で無し
 if (!q.has('nodinos')) view.dryos.load(import.meta.env.BASE_URL + 'models/dryo.glb').catch(e => console.error('ドリオサウルスの読み込みに失敗', e));
-if (!q.has('nodinos')) for (const [k, f] of [['triceras', 'tricera'], ['brachios', 'brachio'], ['allos', 'allo'], ['trexes', 'trex']]) {
+if (!q.has('nodinos')) for (const [k, f] of [['triceras', 'tricera'], ['brachios', 'brachio'], ['allos', 'allo'], ['trexes', 'trex'], ['spinos', 'spino'], ['parasaurs', 'parasaur'], ['raptors', 'raptor'], ['ankylos', 'ankylo']]) {
   view[k].load(import.meta.env.BASE_URL + `models/${f}.glb`).catch(e => console.error(f + 'の読み込みに失敗', e));
 }
 if (q.has('nowater')) view.water.visible = false;          // 調査用: 水の板を消す
@@ -505,7 +505,7 @@ window.__slice = {
   forestReady: () => view.forest.ready,
   stegoReady: () => view.stegos.ready,
   dryoReady: () => view.dryos.ready,
-  dinosReady: () => view.stegos.ready && view.dryos.ready && view.triceras.ready && view.brachios.ready && view.allos.ready && view.trexes.ready,
+  dinosReady: () => view.stegos.ready && view.dryos.ready && view.triceras.ready && view.brachios.ready && view.allos.ready && view.trexes.ready && view.spinos.ready && view.parasaurs.ready && view.raptors.ready && view.ankylos.ready,
   herdTune: o => Object.assign(HERD, o),
   herdScale: () => HERD.scale,
   speciesTune: (kind = 'stego', o) => Object.assign(SPECIES[kind], o || {}),   // 検査用: 種類ごとの設定を見る/変える
@@ -522,7 +522,7 @@ window.__slice = {
   }),
   // 検査用: 描いている個体の、骨の位置(世界座標)・状態・地面の高さ
   creatures: (kind = 'stego', bones = ['Head', 'Tail04', 'ForeLFoot', 'ForeRFoot', 'HindLFoot', 'HindRFoot']) =>
-    view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes' }[kind] || 'stegos'].pool.filter(p => p.animal).map(p => {
+    view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes', spino: 'spinos', parasaur: 'parasaurs', raptor: 'raptors', ankylo: 'ankylos' }[kind] || 'stegos'].pool.filter(p => p.animal).map(p => {
     const w = name => { const o = p.model.getObjectByName(name); if (!o) return null; const v = o.getWorldPosition(new p.group.position.constructor()); return [v.x, v.y, v.z]; };
     const a = p.animal;
     const head = w(bones[0]), tail = w(bones[1]);
@@ -537,7 +537,7 @@ window.__slice = {
   }),
   stegos: () => window.__slice.creatures('stego'),
   dryos: () => window.__slice.creatures('dryo', ['Head', 'Tail04', 'LegLFoot', 'LegRFoot']),
-  herdsNear: (x, y, r, kind = 'stego') => [...view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes' }[kind] || 'stegos'].herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
+  herdsNear: (x, y, r, kind = 'stego') => [...view[{ stego: 'stegos', dryo: 'dryos', tricera: 'triceras', brachio: 'brachios', allo: 'allos', trex: 'trexes', spino: 'spinos', parasaur: 'parasaurs', raptor: 'raptors', ankylo: 'ankylos' }[kind] || 'stegos'].herds.herdsNear(x, y, r)].map(h => ({ cx: h.cx, cy: h.cy, n: h.animals.length })),
   trees: (x, y) => view.forest.veg.around(x, y).filter(t => t.kind !== 'rock').slice(0, 4000),
   vegLineup(dist) { view.forest.lineup(glider.x, glider.y, terrain.height(glider.x, glider.y + (dist || 140)), dist); },
   forest: () => ({ counts: view.forest.counts, tris: view.forest.triangles(), frameTris: view.renderer.info.render.triangles, calls: view.renderer.info.render.calls }),
