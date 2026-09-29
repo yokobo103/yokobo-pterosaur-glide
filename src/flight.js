@@ -22,11 +22,12 @@ export class Glider {
     this.t = terrain; this.f = field;
     this.x = opts.x || 0; this.y = opts.y || 0;
     this.x0 = this.x; this.y0 = this.y;   // 距離は出発点からの直線距離で数える
-    this.z = this.t.height(this.x, this.y) + (opts.alt ?? AIR.startAlt);
+    this.z = this.t.surface(this.x, this.y) + (opts.alt ?? AIR.startAlt);
     this.head = 0; this.bank = 0; this.time = 0; this.inp = 0;
     this.vz = 0; this.lift = 0; this.alive = true; this.best = 0;
   }
-  get agl() { return this.z - this.t.height(this.x, this.y); }
+  // 当たる面は地面か水面の高い方(川の上で水の中へ沈まないように)
+  get agl() { return this.z - this.t.surface(this.x, this.y); }
   step(dt, input) {
     if (!this.alive) return;
     const k = AIR.inputTau > 0 ? 1 - Math.exp(-dt / AIR.inputTau) : 1;
@@ -47,7 +48,7 @@ export class Glider {
     this.time += dt;
     // 以前は北(+y)へ進んだ分だけ数えていて、東や南へ飛ぶと距離が増えなかった(所長「途中からカウントされなくなる」)
     this.best = Math.max(this.best, Math.hypot(this.x - this.x0, this.y - this.y0));
-    if (this.agl <= 2) { this.alive = false; this.z = this.t.height(this.x, this.y) + 2; }
+    if (this.agl <= 2) { this.alive = false; this.z = this.t.surface(this.x, this.y) + 2; }
   }
 }
 
@@ -73,7 +74,7 @@ export class Autopilot {
       let blocked = false;                                   // 途中の山を越えられるか
       for (let s = 150; s < d; s += 150) {
         const px = g.x + (c.x - g.x) * s / d, py = g.y + (c.y - g.y) * s / d;
-        if (g.z - s / effGlide(AIR.Vcruise) < g.t.height(px, py) + 30) { blocked = true; break; }
+        if (g.z - s / effGlide(AIR.Vcruise) < g.t.surface(px, py) + 30) { blocked = true; break; }
       }
       if (blocked) continue;
       const s = (c.y - g.y) - this.lat * Math.abs(c.x - g.x) + (desperate ? 80000 / Math.max(d, 1) : 0);
@@ -94,7 +95,7 @@ export class Autopilot {
     for (let t = 0; t < secs; t += step) {
       x += V * Math.sin(h) * step; y += V * Math.cos(h) * step;
       z += (g.f.ridgeAt(x, y, z, sun) - TUNE.ambient - sink(V)) * step;   // 尾根の上昇風だけで判断する(上昇気流は回って使う)
-      if (z - g.t.height(x, y) < 35) return -1e7;
+      if (z - g.t.surface(x, y) < 35) return -1e7;
     }
     // 静かな空気を同じ時間滑った場合の高さと比べた、得した高さを距離に換算
     const stillZ = g.z - (sink(V) + TUNE.ambient) * secs;

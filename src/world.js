@@ -123,8 +123,16 @@ export class Terrain {
       mtn = TUNE.mtnHeight * ridged(x / TUNE.mtnWave, y / (TUNE.mtnWave * 2.6), this.seed + 71)
         * smoothstep(TUNE.mtnStart, TUNE.mtnStart + TUNE.mtnRamp, d);
     }
-    return this.water + bed + bank + terrace + detail + mtn;
+    const land = this.water + bed + bank + terrace + detail + mtn;
+    if (!TUNE.river) return land;
+    // 川: 低地へならしてから溝を掘る。幅は川に沿ってゆっくり変える
+    const w = TUNE.riverWidth * (0.75 + 0.5 * (0.5 + 0.5 * Math.sin(y / 2900 + this.seed * 1.3)));
+    const vall = Math.exp(-((d / (w * TUNE.riverValley)) ** 2));
+    const chan = TUNE.riverDepth * Math.exp(-((d / (w * 0.5)) ** 2));
+    return land + (this.water + TUNE.riverFloor - land) * vall - chan;
   }
+  // 飛ぶもの・降りるものが当たる面。川の上では水面(水の板は water+0.6 に置いてある)
+  surface(x, y) { return Math.max(this.height(x, y), this.water + 0.6); }
   slope(x, y, e = 30) {
     const z = this.height(x, y);
     let m = 0;
@@ -186,6 +194,13 @@ export const TUNE = {
   ridgeK: 1.0,        // 斜面に当たった風がどれだけ上向きになるか
   ridgeH: 140,        // 斜面からこの高さで上昇風が弱まる [m]
   ridgeCap: 6,        // 尾根の上昇風の上限 [m/s]
+  // 川。川筋のまわりを水面より少し高い平らな低地(氾濫原)へならし、真ん中を水面より下まで掘る。
+  // 以前は台地の持ち上げ(0〜70m)が川筋にも乗り、川底が水面より約30m上にあって、水がほとんど見えなかった
+  river: 0,           // 1で川あり(丘の世界の既定)
+  riverWidth: 260,    // 水面の幅の目安 [m]。川に沿って0.75〜1.25倍に揺らす
+  riverValley: 2.6,   // 低地の広がり(水面の幅の何倍か)
+  riverFloor: 2.5,    // 低地の高さ(水面から) [m]
+  riverDepth: 5.0,    // 溝の深さ [m]
 };
 
 // 尾根の試作で、尾根沿いに飛べると測れた山脈の設定(tools/ridge-band.mjs: 86%の区間で高度を保てる・最長2.5km・斜面から150m)
@@ -193,7 +208,7 @@ export const WORLDS = {
   flat: {},
   // 既定。尾根の風は使わず、起伏そのものを「避けるか越えるか」の判断にする(所長の試走 2026-09-17)
   // 高い山はたまに置く。越えられないので回り込む(所長 2026-09-17)。着地点の輪は「面白くない」で廃止
-  hills: { mtn: 1, mtnMode: 'hills', mtnHeight: 220, mtnWave: 2400, peakChance: 0.4 },
+  hills: { mtn: 1, mtnMode: 'hills', mtnHeight: 220, mtnWave: 2400, peakChance: 0.4, river: 1 },
   ridge: { mtn: 1, mtnMode: 'ranges', mtnHeight: 550, rangeWidth: 700, windSpeed: 11, ridgeH: 240, leeCap: 2.5 },
 };
 

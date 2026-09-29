@@ -45,6 +45,9 @@ const ui = {
 
 const WORLD = WORLDS[q.get('world')] ? q.get('world') : 'hills';   // 既定は丘のある世界。?world=flat で起伏なし
 Object.assign(TUNE, WORLDS[WORLD]);
+// 調整用: ?riverw=260 で川の幅、?noriver で川なし(見比べ用)
+if (q.has('riverw') && +q.get('riverw') > 0) TUNE.riverWidth = +q.get('riverw');
+if (q.has('noriver')) TUNE.river = 0;
 // 世界ごとの但し書き。遊び方の終わりに足す(言葉を切り替えても消えないよう、applyLangから入れ直す)
 const WORLD_NOTE = WORLD === 'ridge'
   ? '<br><br><b>山脈の世界：</b>風は左から吹いています。山の<b>左側の斜面</b>に沿って飛ぶと上がります。' +
@@ -63,6 +66,7 @@ if (!q.has('nodinos')) for (const [k, f] of [['triceras', 'tricera'], ['brachios
   view[k].load(import.meta.env.BASE_URL + `models/${f}.glb`).catch(e => console.error(f + 'の読み込みに失敗', e));
 }
 if (q.has('nowater')) view.water.visible = false;          // 調査用: 水の板を消す
+if (q.has('nocut')) view.cutOff = true;                  // 調査用: 層の重なりを捨てない(直す前の描き方。川に見える線の比較用)
 if (q.has('debugground')) setTimeout(() => window.__slice.debugGround(true), 0);   // 調査用: 地面の層を色分け
 if (!q.has('notrees')) view.forest.load(import.meta.env.BASE_URL, view.renderer).catch(e => console.error('木の読み込みに失敗', e));   // ?notrees で木なし(比較用)
 
@@ -562,6 +566,14 @@ window.__slice = {
     horizon: { cx: view.horizon.snap[0], cy: view.horizon.snap[1], hole: view.far.size / 2 - view.horizon.cell - view.far.cell, cell: view.horizon.cell, half: view.horizon.size / 2, ms: view.horizon.maxMs || 0 },
   }),
   // 調査用: 層ごとに色を変える(?debugground=1 と同じ)
+  // 検査用: 地面(と明かり)以外を隠す。層の色分けで画素を読むとき、翼竜の茶色を遠景の赤と取り違えないように
+  groundOnly: (on = true) => {
+    for (const o of view.scene.children) {
+      if (o.isLight || (o.userData && o.userData.part === '地面')) continue;
+      if (on) { o.userData._vis = o.visible; o.visible = false; }
+      else if ('_vis' in o.userData) { o.visible = o.userData._vis; delete o.userData._vis; }
+    }
+  },
   debugGround: (on = true) => {
     view.near.mesh.material.color.set(on ? 0x88ff88 : 0xffffff);
     view.far.mesh.material.color.set(on ? 0xff8888 : 0xffffff);
@@ -644,7 +656,7 @@ window.__slice = {
     for (const k of Object.keys(out)) { const e = out[k]; e.r /= e.n; e.g /= e.n; e.b /= e.n; }
     return out;
   },
-  pick: (x, y) => view.pick(x, y),
+  pick: (x, y, raw = false) => view.pick(x, y, raw),     // raw: 捨てる前の形で判定
   waterY: () => terrain.water,
   _canvas: () => view.renderer.domElement,
   camRoll: () => view.cam.roll,

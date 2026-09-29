@@ -73,7 +73,11 @@ const SURFACE_PARS = `
 // 地面の材質。頂点の色に、世界座標で決まる模様を重ねる。
 function surfaceMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // 内側の層が覆う四角(x, z, 半幅, 有効)。この中では描かない。
+  // 重なった帯で粗い面が細かい面の上に出て、暗い斑点が横一列に並び「川のような線」に見えていた
+  m.userData.cut = { value: new THREE.Vector4(0, 0, 0, 0) };
   m.onBeforeCompile = sh => {
+    sh.uniforms.uCut = m.userData.cut;
     sh.uniforms.uSurf = { value: new THREE.Vector4(SURFACE.macro, SURFACE.meso, SURFACE.fine, SURFACE.bump) };
     sh.uniforms.uSurfAmp = { value: new THREE.Vector4(SURFACE.amp[0], SURFACE.amp[1], SURFACE.amp[2], SURFACE.sand) };
     sh.uniforms.uSurfFade = { value: new THREE.Vector4(SURFACE.midFade[0], SURFACE.midFade[1], SURFACE.fineFade[0], SURFACE.fineFade[1]) };
@@ -91,8 +95,12 @@ void main() {`)
 uniform vec4 uSurfAmp;
 uniform vec4 uSurfFade;
 uniform float uSurfDamp;
+uniform vec4 uCut;
 ${SURFACE_PARS}
-void main() {`)
+void main() {
+  // 内側の層が描く四角の中は描かない(粗い面が細かい面を突き抜けて見えるのを防ぐ)。
+  // カメラは常に四角の中心近くにいるので、境目に段差があっても外を見下ろす形になり、すき間は見えない
+  if (uCut.w > 0.5 && abs(vSurfW.x - uCut.x) < uCut.z && abs(vSurfW.z - uCut.y) < uCut.z) discard;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         {
           vec2 w = vSurfW.xz;
@@ -308,7 +316,7 @@ class Shimmer {
     this.parts = [];
   }
   update(px, py, pz, dt, sun, head = 0) {
-    const t = this.t, ground = t.height(px, py), agl = pz - ground;
+    const t = this.t, ground = t.surface(px, py), agl = pz - ground;
     // 高い所では出さない(低空でだけ見える手がかりにする)
     // 高さで急に消す。低空にいるときだけの手がかりにする
     const near = Math.max(0, 1 - agl / 90) ** 1.5 * sun;
@@ -1181,17 +1189,26 @@ export class View {
     this.camera.updateProjectionMatrix();
   }
   // 検査用: 画面のその点に何が映っているか(近景の地面 / 遠景の地面 / 水面 / 何もない)
-  pick(x, y) {
+  pick(x, y, raw = false) {
     this._ray = this._ray || new THREE.Raycaster();
     // 地面は毎回作り直しているので、当たり判定用の境界を取り直す(古いままだとレイが素通りする)
     for (const m of [this.near.mesh, this.far.mesh, this.horizon.mesh]) { m.geometry.computeBoundingSphere(); m.geometry.computeBoundingBox(); }
     const w = this.renderer.domElement.clientWidth || innerWidth, h = this.renderer.domElement.clientHeight || innerHeight;
     this._ray.setFromCamera(new THREE.Vector2((x / w) * 2 - 1, -(y / h) * 2 + 1), this.camera);
     const hits = this._ray.intersectObjects([this.near.mesh, this.far.mesh, this.horizon.mesh, this.water], false);
-    if (!hits.length) return { what: 'なし' };
-    const o = hits[0].object;
+    // 描画では、外側の層は内側の層の四角の中を捨てている。当たり判定も同じにして、画面に出ているものを返す
+    // (raw のときは形だけで判定する。捨てる前にどこで粗い面が上に出ていたかを数える用)
+    const cutOut = h => {
+      const layer = h.object === this.far.mesh ? this.far : h.object === this.horizon.mesh ? this.horizon : null;
+      if (!layer) return false;
+      const c = layer.mesh.material.userData.cut.value;
+      return c.w > 0.5 && Math.abs(h.point.x - c.x) < c.z && Math.abs(h.point.z - c.y) < c.z;
+    };
+    const hit = raw ? hits[0] : hits.find(h => !cutOut(h));
+    if (!hit) return { what: 'なし' };
+    const o = hit.object;
     const what = o === this.near.mesh ? '近景' : o === this.far.mesh ? '遠景' : o === this.horizon.mesh ? '地平' : '水面';
-    return { what, dist: hits[0].distance, point: [hits[0].point.x, hits[0].point.y, hits[0].point.z] };
+    return { what, dist: hit.distance, point: [hit.point.x, hit.point.y, hit.point.z] };
   }
   // 検査用: 座標を画面のピクセルへ落とす
   projectLocal(x, y, z) { return this._proj(new THREE.Vector3(x, y, z).applyMatrix4(this.glider.matrixWorld)); }
@@ -1247,6 +1264,13 @@ export class View {
     let busy = this.near.update(cx, cy, marks);
     if (!busy || late(this.far)) busy = this.far.update(cx, cy, marks, this.near.size / 2, step) || busy;
     if (!busy || late(this.horizon)) this.horizon.update(cx, cy, marks, this.far.size / 2, step);
+    // 外側の層は、内側の層が実際に作られている四角(作り直しが遅れていても、その時点の中心)の中を描かない
+    const cut = (outer, inner) => {
+      if (!inner.snap || this.cutOff) { outer.mesh.material.userData.cut.value.w = 0; return; }   // cutOff: 調査用(?nocut)
+      outer.mesh.material.userData.cut.value.set(SX * inner.snap[0], inner.snap[1], inner.size / 2 - 0.5, 1);
+    };
+    cut(this.far, this.near);
+    cut(this.horizon, this.far);
     this.water.position.x = SX * g.x; this.water.position.z = g.y;
     this.forest.update(g.x, g.y);
     this.plumes.update(g.x, g.y, dt);
@@ -1279,7 +1303,7 @@ export class View {
       L.t += dt;
       const d = L.v * tau * (1 - Math.exp(-L.t / tau));
       const lx = L.x + Math.sin(L.head) * d, ly = L.y + Math.cos(L.head) * d;
-      P = { x: lx, y: ly, z: this.terrain.height(lx, ly), head: L.head, bank: 0 };
+      P = { x: lx, y: ly, z: this.terrain.surface(lx, ly), head: L.head, bank: 0 };   // 川の上なら水面に降りる
       this.glider.position.set(SX * P.x, P.z, P.y);
       this.glider.rotation.set(0, -P.head, 0, 'YXZ');
       this.model.position.y = 0;                              // 着地の動きは足元が原点。空中用の持ち上げを外す
