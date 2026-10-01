@@ -15,7 +15,7 @@ await wait(5000);
 const shots = [];
 shots.push({ label: 'はじめて開いたとき', img: await p.screenshot({ encoding: 'base64' }) });
 await down(70, 470); await wait(1500);
-shots.push({ label: '左を押しっぱなし（翼竜が左へ）', img: await p.screenshot({ encoding: 'base64' }) });
+shots.push({ label: '左半分を押しっぱなし（翼竜が左へ）', img: await p.screenshot({ encoding: 'base64' }) });
 await up(); await wait(400);
 await down(320, 470); await wait(1500); await up(); await wait(600);
 shots.push({ label: '左右とも試したあと', img: await p.screenshot({ encoding: 'base64' }) });

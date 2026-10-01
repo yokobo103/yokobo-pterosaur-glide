@@ -155,11 +155,23 @@ function manual() {
 }
 function input(dt) {
   if (window.__slice && typeof window.__slice.forceInput === 'number') return window.__slice.forceInput;
-  // タイトルでは、押している間だけ後ろの翼竜を手で動かせる(さわって覚える)。離せば自動操縦に戻る
-  if (demo && manual() !== 0) return manual();
+  // タイトルでは、押している間だけ後ろの翼竜を手で動かせる(さわって覚える)
+  if (demo) {
+    const v = manual(), now = performance.now();
+    if (v !== 0) { demoHand = now; demoAuto = 0; return v; }
+    // 離した直後に自動操縦へ戻すと、自分の目標へ向かって逆へ切り返し「押した方の逆へ行く」に見えた(所長)。
+    // 離したらしばらくはまっすぐ水平に戻り、そのあとも自動操縦はゆっくりしか切らない
+    if (now - demoHand < DEMO_CALM * 1000) return 0;
+    const want = auto ? auto.input(glider, dt) : 0;
+    demoAuto += Math.max(-DEMO_EASE * dt, Math.min(DEMO_EASE * dt, want - demoAuto));
+    return demoAuto;
+  }
   if (auto) return auto.input(glider, dt);
   return manual();
 }
+const DEMO_CALM = 5;          // 離してから自動操縦に戻るまでの秒数
+const DEMO_EASE = 0.35;       // タイトルの自動操縦が操作を変える速さ(1秒あたり)
+let demoHand = 0, demoAuto = 0;
 
 // ---- さわって覚える(はじめて開いたとき) ----
 // 説明の板は出さない。タイトルの後ろで飛んでいる翼竜を、左右それぞれ押しっぱなしで曲げられたら終わり
@@ -176,16 +188,20 @@ function tutText() {
 function renderTut() {
   el('try').classList.toggle('hidden', tutDone && !(tut.doneL && tut.doneR));
   el('tryText').textContent = tutText();
-  el('tryL').classList.toggle('done', tut.doneL);
-  el('tryR').classList.toggle('done', tut.doneR);
+  el('zoneL').classList.toggle('done', tut.doneL);
+  el('zoneR').classList.toggle('done', tut.doneR);
+  el('try').classList.toggle('all', tut.doneL && tut.doneR);
+  for (const e of document.querySelectorAll('.zHold')) e.textContent = t('zoneHold');
+  el('zoneLText').textContent = t('zoneLeft');
+  el('zoneRText').textContent = t('zoneRight');
   ui.go.classList.toggle('pulse', tut.doneL && tut.doneR);
 }
 // 押している時間は実際の時計で数える。1コマの進み(最大0.05秒)を足すと、遅い端末では
 // 0.9秒押しても0.22秒ぶんにしかならず、いつまでも「できた」にならなかった
 function updateTut() {
   const v = manual(), now = performance.now();
-  el('tryL').classList.toggle('on', v < 0);
-  el('tryR').classList.toggle('on', v > 0);
+  el('zoneL').classList.toggle('on', v < 0);
+  el('zoneR').classList.toggle('on', v > 0);
   if (tut.doneL && tut.doneR) return;
   tut.leftAt = v < 0 ? (tut.leftAt || now) : 0;
   tut.rightAt = v > 0 ? (tut.rightAt || now) : 0;

@@ -16,7 +16,7 @@ const hold = async (x, y, ms) => {
   const b0 = await p.evaluate(() => window.__slice.state().bank);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
   await wait(ms * 0.5);
-  const lit = await p.evaluate(() => ({ onL: document.getElementById('tryL').classList.contains('on'), onR: document.getElementById('tryR').classList.contains('on') }));
+  const lit = await p.evaluate(() => ({ onL: document.getElementById('zoneL').classList.contains('on'), onR: document.getElementById('zoneR').classList.contains('on') }));
   await wait(ms * 0.4);
   const b1 = await p.evaluate(() => window.__slice.state().bank);
   await wait(ms * 0.1);
@@ -45,7 +45,7 @@ await wait(1500);
 
 const t0 = await tut();
 console.log(`  はじめて: 「${t0.text}」`);
-check('はじめての人に案内が出る', t0.shown && /さわって/.test(t0.text));
+check('はじめての人に案内が出る', t0.shown && /押しっぱなし/.test(t0.text));
 
 // キーの ← で曲がる向きを先に測る(左右の取り違えを、画面の上の符号どうしで比べるため)
 await p.keyboard.down('ArrowLeft'); await wait(500);
@@ -63,8 +63,16 @@ const t1 = await tut();
 console.log(`  左を押した: 指が当たったもの ${L.hit} / 傾き ${L.bank.toFixed(3)}・動き ${L.dBank.toFixed(3)}(キーの←では ${keyBank.toFixed(3)}) / 印 左${L.onL ? '光' : '-'} 右${L.onR ? '光' : '-'} / 「${t1.text}」`);
 check('タイトルの上でも指は後ろの世界に届く', L.hit === 'CANVAS' || L.hit === 'canvas');
 check('左を押すと、キーの←と同じ向きに曲がる', turned(L, Math.sign(keyBank)));
-check('押している側の印が光る', L.onL && !L.onR);
+check('押している側の半分が光る', L.onL && !L.onR);
 check('左ができたら次は右へ', t1.doneL && !t1.doneR && /右も/.test(t1.text));
+
+// 離したあと3秒、反対側へ大きく切り返さないか(離すと自動操縦がすぐ逆へ切っていた)
+const back = [];
+for (let i = 0; i < 12; i++) { await wait(250); back.push(await p.evaluate(() => window.__slice.state().bank)); }
+const worst = Math.max(...back.map(v => -Math.sign(keyBank) * v));     // 右へ(反対側へ)どれだけ傾いたか
+console.log(`  左を離したあとの傾き: ${back.map(v => v.toFixed(2)).join(' ')}`);
+check(`離したあと反対へ切り返さない(反対側へ最大 ${worst.toFixed(2)})`, worst < 0.15);
+check('離すと水平へ戻っていく', Math.abs(back[back.length - 1]) < Math.abs(back[0]) || Math.abs(back[back.length - 1]) < 0.1);
 
 const R = await hold(320, 470, 900);
 const t2 = await tut();
@@ -98,7 +106,7 @@ await p.waitForFunction(() => window.__slice && window.__slice.modelReady(), { t
 await wait(800);
 const en = await tut();
 console.log(`  英語: 「${en.text}」`);
-check('英語でも出る', en.shown && /Try it/.test(en.text));
+check('英語でも出る', en.shown && /Try holding/.test(en.text));
 await p.screenshot({ path: 'screenshots/_さわって覚える.png' });
 check('エラーなし', errs.length === 0); if (errs.length) console.log(errs.slice(0, 3));
 await b.close();
