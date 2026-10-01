@@ -52,6 +52,19 @@
            text-align:center; color:#fff; padding:calc(env(safe-area-inset-top) + 9vh) 22px calc(env(safe-area-inset-bottom) + 7vh);
            background:linear-gradient(180deg,rgba(5,8,13,.55) 0%,rgba(5,8,13,.16) 24%,rgba(5,8,13,0) 42%,
                                               rgba(5,8,13,.22) 70%,rgba(5,8,13,.62) 100%); }
+  /* タイトルの上でも左右を押せば後ろの翼竜が曲がる(さわって覚える)。押せる物だけ指を受ける */
+  #start { pointer-events:none; }
+  #start button { pointer-events:auto; }
+  /* さわってみて の案内。左右の端の印は「押す場所」、押している間だけ光る */
+  #try { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 -8px; }
+  #try p { flex:1; font-size:14px; line-height:1.65; font-weight:600; text-shadow:0 1px 8px rgba(0,0,0,.85); white-space:pre-line; }
+  #try .side { flex:none; width:46px; height:46px; display:grid; place-items:center; border-radius:50%;
+               border:1px solid rgba(255,255,255,.5); background:rgba(10,14,20,.35); font-size:15px;
+               transition:transform .15s, background .15s, color .15s; }
+  #try .side.on { background:#eef3f9; color:#10151d; transform:scale(1.14); }
+  #try .side.done { border-color:#7fe08a; color:#7fe08a; }
+  #go.pulse { animation:goPulse 1.1s ease-in-out infinite; }
+  @keyframes goPulse { 50% { transform:scale(1.06); box-shadow:0 0 0 9px rgba(238,243,249,.2), 0 10px 30px rgba(0,0,0,.45); } }
   #start h1 { font-size:clamp(30px,10vw,44px); font-weight:800; letter-spacing:.06em; line-height:1.15;
               text-shadow:0 2px 18px rgba(0,0,0,.65), 0 1px 3px rgba(0,0,0,.9); }
   /* 題の下の細い線。中央が明るく、両端へ消える */
@@ -229,6 +242,11 @@
     <div>
       <h1 id="title">翼竜グライダー</h1>
       <p id="tagline"></p>
+    </div>
+    <div id="try" class="hidden" aria-live="polite">
+      <span id="tryL" class="side" aria-hidden="true">◀</span>
+      <p id="tryText"></p>
+      <span id="tryR" class="side" aria-hidden="true">▶</span>
     </div>
     <div>
       <button id="go" type="button"><span id="goLabel">はじめる</span>

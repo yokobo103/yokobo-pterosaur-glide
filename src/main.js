@@ -145,14 +145,56 @@ cv.addEventListener('pointercancel', drop);
 addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('selectstart', e => e.preventDefault());
 
-function input(dt) {
-  if (window.__slice && typeof window.__slice.forceInput === 'number') return window.__slice.forceInput;
-  if (auto) return auto.input(glider, dt);
+// 手の入力(-1..1)。キーと、画面の左半分／右半分の押しっぱなし
+function manual() {
   let v = 0;
   if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) v -= 1;
   if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) v += 1;
   for (const s of touch.values()) v += s;
   return Math.max(-1, Math.min(1, v));
+}
+function input(dt) {
+  if (window.__slice && typeof window.__slice.forceInput === 'number') return window.__slice.forceInput;
+  // タイトルでは、押している間だけ後ろの翼竜を手で動かせる(さわって覚える)。離せば自動操縦に戻る
+  if (demo && manual() !== 0) return manual();
+  if (auto) return auto.input(glider, dt);
+  return manual();
+}
+
+// ---- さわって覚える(はじめて開いたとき) ----
+// 説明の板は出さない。タイトルの後ろで飛んでいる翼竜を、左右それぞれ押しっぱなしで曲げられたら終わり
+const TUT_STORE = 'glide.tut', TUT_HOLD = 0.5;      // 片側を0.5秒押し続けたら「できた」
+const coarse = (() => { try { return matchMedia('(pointer: coarse)').matches; } catch (e) { return true; } })();
+let tutDone = (() => { try { return localStorage.getItem(TUT_STORE) === '1'; } catch (e) { return false; } })();
+const tut = { leftAt: 0, rightAt: 0, doneL: false, doneR: false };   // 押し始めた時刻(実際の時計)
+function tutText() {
+  if (tut.doneL && tut.doneR) return t('tryDone');
+  if (tut.doneL) return t('tryLeftDone');
+  if (tut.doneR) return t('tryRightDone');
+  return t(coarse ? 'tryTouch' : 'tryKeys');
+}
+function renderTut() {
+  el('try').classList.toggle('hidden', tutDone && !(tut.doneL && tut.doneR));
+  el('tryText').textContent = tutText();
+  el('tryL').classList.toggle('done', tut.doneL);
+  el('tryR').classList.toggle('done', tut.doneR);
+  ui.go.classList.toggle('pulse', tut.doneL && tut.doneR);
+}
+// 押している時間は実際の時計で数える。1コマの進み(最大0.05秒)を足すと、遅い端末では
+// 0.9秒押しても0.22秒ぶんにしかならず、いつまでも「できた」にならなかった
+function updateTut() {
+  const v = manual(), now = performance.now();
+  el('tryL').classList.toggle('on', v < 0);
+  el('tryR').classList.toggle('on', v > 0);
+  if (tut.doneL && tut.doneR) return;
+  tut.leftAt = v < 0 ? (tut.leftAt || now) : 0;
+  tut.rightAt = v > 0 ? (tut.rightAt || now) : 0;
+  const was = tut.doneL + tut.doneR;
+  if (tut.leftAt && now - tut.leftAt >= TUT_HOLD * 1000) tut.doneL = true;
+  if (tut.rightAt && now - tut.rightAt >= TUT_HOLD * 1000) tut.doneR = true;
+  if (tut.doneL + tut.doneR === was) return;
+  if (tut.doneL && tut.doneR) { tutDone = true; try { localStorage.setItem(TUT_STORE, '1'); } catch (e) { /* 覚えられなくても遊べる */ } }
+  renderTut();
 }
 
 function hud() {
@@ -289,6 +331,7 @@ function applyLang() {
   el('camLabel').textContent = t('camLabel');
   el('camNote').textContent = t('camNote');
   ui.howtoClose.textContent = ui.setClose.textContent = ui.dexClose.textContent = t('back');
+  renderTut();
   renderDex();
   for (const b of document.querySelectorAll('#cams button')) b.textContent = t('cam' + b.dataset.cam.toUpperCase());
   document.querySelectorAll('.stat span')[0].textContent = t('hudDist');
@@ -461,6 +504,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   advance(dt);
   if (demo) {
+    updateTut();
     glider.time = DEMO_TIME;                // 日を進めない(タイトルを開いたままでも暗くならない)
     if (!glider.alive) demoFlight();        // 降りたら次の便へ
   }
@@ -484,6 +528,7 @@ function startRun() {
 // タイトルへ戻る。後ろでまた見本飛行が始まる
 function toTitle() {
   vario.stop();
+  keys.clear(); touch.clear();
   pending = null;
   ended = false; running = false;
   showHud(false);
@@ -660,6 +705,7 @@ window.__slice = {
   waterY: () => terrain.water,
   _canvas: () => view.renderer.domElement,
   camRoll: () => view.cam.roll,
+  tutorial: () => ({ ...tut, done: tutDone, text: el('tryText').textContent, shown: !el('try').classList.contains('hidden') }),
   begin() { ui.start.classList.add('hidden'); ui.lang.classList.add('hidden'); showHud(true); running = true; },
   auto(on = true) { auto = on ? new Autopilot() : null; },
   // 実時間を待たずにn秒ぶん進める

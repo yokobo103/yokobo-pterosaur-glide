@@ -45,6 +45,7 @@ const CHECKS = [
   ['記録とランキング',       'check-records.mjs', []],
   ['ずかん',                 'check-dex.mjs', []],
   ['ポーズ',                 'check-pause.mjs', []],
+  ['さわって覚える',         'check-tutorial.mjs', []],
   ['層の境目が線に見えない',  'check-seam.mjs', []],
 
   ['ステゴサウルス',         'check-stego.mjs', []],
