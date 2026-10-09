@@ -227,7 +227,10 @@ function hud() {
 // この端末の記録は localStorage。世界の記録は WORLD_API があるときだけ読み書きする。
 // シーズンは「大きく作り変えたら変える」印。世界の記録はシーズンごとに分ける。
 export const SEASON = 's1';
-const WORLD_API = '';                     // 例: 'https://xxx.workers.dev' (まだ無い)
+// 世界の記録の受付(Cloudflare Workers + D1。中身は server/)。?worldapi= で差し替えられる(検査用)。
+// 検査用の口(?harness)では本物へ送らない(世界のランキングを検査の記録で汚さない)
+const WORLD_DEFAULT = 'https://glide-ranking.yokobo-ai-lab.workers.dev';
+const WORLD_API = q.get('worldapi') || (HARNESS ? '' : WORLD_DEFAULT);
 const REC_STORE = 'glide.records', NAME_STORE = 'glide.name', REC_MAX = 20;
 const loadJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } };
 const saveJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 保存できなくても遊べる */ } };
@@ -238,33 +241,45 @@ let rankTab = 'mine', worldRows = null, worldState = 'none';
 
 const cleanName = s2 => [...(s2 || '')].filter(c => c >= ' ').join('').trim().slice(0, 12);
 
+let lastAt = 0;                           // いちばん新しく残した走行(自分の行に印を付ける)
+let worldTotal = 0, myWorld = null, sending = null;
+
 function putRecord(name) {
   if (!pending) return;
+  const named = cleanName(name) !== '';
   const row = { ...pending, name: cleanName(name) || (getLang() === 'en' ? 'anon' : 'ななし'), at: Date.now() };
   records = [...records, row].sort((a, b) => b.km - a.km).slice(0, REC_MAX);
   saveJSON(REC_STORE, records);
   myName = row.name;
   try { localStorage.setItem(NAME_STORE, myName); } catch (e) { /* 覚えられなくても遊べる */ }
   pending = null;
-  if (WORLD_API) sendWorld(row);
-  renderRank(row.at);
+  lastAt = row.at;
+  // 世界へ送るのは名前の付いた走行だけ。名前を付けずに次へ行った「ななし」は、この端末にだけ残す
+  if (WORLD_API && named) sendWorld(row);
+  renderRank();
 }
 
-// 世界の記録。サーバーが無いうちは何もしない(受け口だけ用意しておく)
-async function sendWorld(row) {
-  try {
-    await fetch(`${WORLD_API}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ season: SEASON, name: row.name, km: row.km, found: row.found, seed: row.seed }) });
-    worldRows = null;
-  } catch (e) { /* 送れなくても手元の記録は残る */ }
+// 世界の記録。送れなくても手元の記録は残る
+function sendWorld(row) {
+  myWorld = null;
+  sending = fetch(`${WORLD_API}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ season: SEASON, name: row.name, km: row.km, found: row.found, seed: row.seed, at: row.at }) })
+    .then(r => r.json()).then(j => { if (j.ok) myWorld = { rank: j.rank, total: j.total }; })
+    .catch(() => { /* 送れなくても遊べる */ })
+    .finally(() => {
+      sending = null; worldState = 'none'; worldRows = null;    // 次に世界のタブを開いたら読み直す
+      if (rankTab === 'world' && !ui.rank.classList.contains('hidden')) loadWorld(); else renderRank();
+    });
 }
 async function loadWorld() {
-  if (!WORLD_API) { worldState = 'off'; return; }
+  if (!WORLD_API) { worldState = 'off'; renderRank(); return; }
   worldState = 'loading'; renderRank();
   try {
+    if (sending) await sending;             // 送っている最中なら、載ってから読む
     const r = await fetch(`${WORLD_API}/top?season=${SEASON}`);
-    worldRows = await r.json();
-    worldState = 'ok';
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    worldRows = j.rows; worldTotal = j.total; worldState = 'ok';
   } catch (e) { worldState = 'fail'; }
   renderRank();
 }
@@ -280,12 +295,15 @@ function rowHTML(r, i, mark) {
          `${found}<span>${r.km.toFixed(2)} ${t('km')}</span></li>`;
 }
 
-function renderRank(mark) {
+function renderRank(mark = lastAt) {
   const mine = rankTab === 'mine';
   ui.rankHead.textContent = t(mine ? 'rankHeadMine' : 'rankHeadWorld');
   ui.tabMine.setAttribute('aria-selected', String(mine));
   ui.tabWorld.setAttribute('aria-selected', String(!mine));
-  ui.seasonTag.textContent = `${t('season')} ${SEASON}`;
+  // 下の小さな字: シーズンと、世界での順位(残した直後)か世界の件数
+  const extra = myWorld ? t('worldRank', myWorld.rank, myWorld.total)
+              : (!mine && worldState === 'ok') ? t('worldCount', worldTotal) : '';
+  ui.seasonTag.textContent = `${t('season')} ${SEASON}${extra ? ' ・ ' + extra : ''}`;
   let rows = mine ? records : worldRows;
   if (!mine && worldState !== 'ok') {
     ui.rankList.innerHTML = `<li class="none">${t(worldState === 'loading' ? 'rankLoading' : worldState === 'fail' ? 'rankWorldFail' : 'rankWorldOff')}</li>`;

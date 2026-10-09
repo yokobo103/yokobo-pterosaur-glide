@@ -1,0 +1,11 @@
+// 翼竜グライダーの世界ランキング。デプロイ: cd server && npx wrangler deploy
+// 表を作り直すとき: npx wrangler d1 execute glide-ranking --remote --file=schema.sql
+{
+  "name": "glide-ranking",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "preview_urls": false,
+  "d1_databases": [
+    { "binding": "DB", "database_name": "glide-ranking", "database_id": "3ce023e7-71a6-4782-bdd6-4e8c522bcec2" }
+  ]
+}

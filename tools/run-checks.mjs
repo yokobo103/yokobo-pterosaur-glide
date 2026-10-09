@@ -43,6 +43,7 @@ const CHECKS = [
   ['押しても文字が選択されない', 'check-noselect.mjs', []],
   ['着地の動き',             'check-landing.mjs', []],
   ['記録とランキング',       'check-records.mjs', []],
+  ['世界ランキング',         'check-world.mjs', []],
   ['ずかん',                 'check-dex.mjs', []],
   ['ポーズ',                 'check-pause.mjs', []],
   ['さわって覚える',         'check-tutorial.mjs', []],
